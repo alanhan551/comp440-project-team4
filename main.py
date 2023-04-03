@@ -32,9 +32,9 @@ truncate_table = "TRUNCATE TABLE user"
 # Connect to server
 cnx = mysql.connector.connect(
     host="localhost",
+    user="root",
     port=3306,
-    user="ahan",
-    password="Adminpassw0rd!",
+    password="varsenik01",
     database=DB_NAME)
 
 # Get a cursor
