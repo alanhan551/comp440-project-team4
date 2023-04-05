@@ -1,10 +1,13 @@
 import mysql.connector
 from mysql.connector import errorcode
 import PySimpleGUI as sg
+import re
 
 DB_NAME = 'course_project'
 
 TABLES = {}
+
+DEFAULT_ROWS = {}
 
 TABLES['user'] = (
     "CREATE TABLE IF NOT EXISTS `user` ("
@@ -19,28 +22,49 @@ TABLES['user'] = (
     "  ) ENGINE = InnoDB DEFAULT CHARSET=utf8mb4" 
 )
 
-add_users = ("INSERT INTO user "
-             "(username, password, firstName, lastName, email) "
-             "VALUES ('test1', 'testpassword1', 'Bob', 'Smith', 'bob.smith@gmail.com'), "
-             "       ('test2', 'testpassword2', 'Amanda', 'Walters', 'amanda.walters@gmail.com'), "
-             "       ('test3', 'testpassword3', 'Denise', 'Belair', 'denise.belair34@yahoo.com'), "
-             "       ('test4', 'testpassword4', 'Richard', 'Spacey', 'richard.spacey@gmail.com'), "
-             "       ('test5', 'testpassword5', 'Curtis', 'Lee', 'curtis.lee@gmail.com')")
+TABLES['item'] = (
+    "CREATE TABLE IF NOT EXISTS `item` ("
+	"   `id` INT NOT NULL AUTO_INCREMENT,"
+    "   `title` varchar(32) NOT NULL,"
+    "   `description` varchar(64) NOT NULL,"
+    "   `category` varchar(255) NOT NULL,"
+    "   `price` DECIMAL(16,2) NOT NULL,"
+    "   `insert_user` varchar(32) NOT NULL,"
+    "   `insert_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+    "   PRIMARY KEY (`id`),"
+    "   FOREIGN KEY(`insert_user`) REFERENCES `user`(`username`),"
+    "   UNIQUE KEY `item_id_UNIQUE` (`id`)"
+    "  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+)
 
-truncate_table = "TRUNCATE TABLE user"
+DEFAULT_ROWS['user'] = (
+    "INSERT INTO user "
+    "(username, password, firstName, lastName, email) "
+    "VALUES ('test1', 'testpassword1', 'Bob', 'Smith', 'bob.smith@gmail.com'), "
+    "       ('test2', 'testpassword2', 'Amanda', 'Walters', 'amanda.walters@gmail.com'), "
+    "       ('test3', 'testpassword3', 'Denise', 'Belair', 'denise.belair34@yahoo.com'), "
+    "       ('test4', 'testpassword4', 'Richard', 'Spacey', 'richard.spacey@gmail.com'), "
+    "       ('test5', 'testpassword5', 'Curtis', 'Lee', 'curtis.lee@gmail.com')"
+)
+
+DEFAULT_ROWS['item'] = (
+    "INSERT INTO item "
+    "(title, description, category, price, insert_user) "
+    "VALUES ('Smartphone', 'This is the new iPhone X', 'electronic, cellphone, apple', 1000, 'test1')"
+)
 
 # Connect to server
 cnx = mysql.connector.connect(
     host="localhost",
     port=3306,
-    user="ahan",
-    password="Adminpassw0rd!",
+    user="alanhan",
+    password="Superduperpassw0rd!",
     database=DB_NAME)
 
 # Get a cursor
 cursor = cnx.cursor(buffered=True)
 
-# Use 'course_project' database, or create it if 'course_project' database does not alreay exist.
+# Use 'course_project' database, or create it if 'course_project' database does not already exist.
 def init_database():
     try:
         # Initialize 'course_project' database
@@ -67,24 +91,58 @@ def create_tables():
         table_description = TABLES[table_name]
         try:
             cursor.execute(table_description)
-            create_default_users()
+            set_default_values(table_name)
+            window['-status-'].update('Database initialized.', visible=True)
         except mysql.connector.Error as err:
             if err.errno == errorcode.ER_TABLE_EXISTS_ERROR:
-                create_default_users()
+                set_default_values(table_name)
             else:
                 print("Failed creating table '{}': {}".format(table_name, err))
             
-# Insert default users
-def create_default_users():
+# Clear table and insert default values
+def set_default_values(table):
     try:
-        cursor.execute(truncate_table)
-        cursor.execute(add_users)
+        cursor.execute("""TRUNCATE TABLE {}""".format(table))
+        cursor.execute(DEFAULT_ROWS[table])
         
         # Make sure data is committed to the database
         cnx.commit()
-        window['-status-'].update('Database initialized.', visible=True)
     except mysql.connector.Error as err:
-        window['status-'].update("Failed inserting default users: {}".format(err))
+        window['-status-'].update("Failed inserting default values for table '{}': {}".format(table, err))
+
+def add_item(item_event, data):
+    valid_inputs = False
+
+    valid_inputs = validate_inputs(item_event, data)
+
+    if valid_inputs:
+        try:
+            valid_user = validate_current_user()
+            if valid_user:
+                username = window['-current_user-'].get()
+                
+                # Check if user has reached daily limit for rows in 'item' table
+                cursor.execute("SELECT COUNT(*) AS count FROM item WHERE insert_user=%s AND insert_date >= CURRENT_DATE() AND insert_date < CURRENT_DATE() + INTERVAL 1 DAY", (username,))
+                current_count = 0
+                for (count,) in cursor:
+                    current_count = count
+                if current_count > 2:
+                    window['-add_item_status-'].update("Unable to submit - daily item add limit reached for this user.", visible=True)
+                else:
+                    try:
+                        data_item = (data['-new_item_title-'], data['-new_item_description-'], data['-new_item_category-'], data['-new_item_price-'], username)
+                        cursor.execute("""INSERT INTO item (title, description, category, price, insert_user) VALUES (%s, %s, %s, %s, %s)""", data_item)
+
+                        cnx.commit()
+
+                        item_add_success()
+                    except mysql.connector.Error as err:
+                        window['-add_item_status-'].update("Failed to add current item: {}".format(err), visible=True)
+
+            else:
+                window['-add_item_status-'].update("No user is currently logged in.", visible=True)
+        except mysql.connector.Error as err:
+            window['-add_item_status-'].update("Failed to add item: {}".format(err), visible=True)
 
 # Verify row exists within 'user' table
 def login(login_event, data):
@@ -95,12 +153,12 @@ def login(login_event, data):
     if valid_inputs:
         try:
             data_login = (data['-login_username-'], data['-login_password-'])
-            cursor.execute("SELECT firstName, lastName FROM user WHERE username=%s AND password=%s", data_login)
+            cursor.execute("SELECT username, firstName, lastName FROM user WHERE username=%s AND password=%s", data_login)
             if cursor.rowcount == 0:
                 window['-login_status-'].update("Failed to log in - incorrect username or password.", visible=True)
             else:
-                for (fname, lname) in cursor:
-                    login_success(fname, lname)
+                for (username, fname, lname) in cursor:
+                    login_success(username, fname, lname)
         except mysql.connector.Error as err:
             window['-login_status-'].update("Failed to login: {}".format(err), visible=True)
     
@@ -137,20 +195,58 @@ def register(register_event, data):
 def clear_inputs(data):
     for input in data:
         window[input].update('')
-        
-# Initialize buttons in Login page
-def init_login_buttons():
+
+# Display Home page
+def display_home_page(values):
+    clear_inputs(values)
+    window['-add_item_status-'].update('', visible=False)
+    window['-login_status-'].update('', visible=False)
+    window['-registration_status-'].update('', visible=False)
+    window['-status-'].update('', visible=False)
+    window[f'-INITIALIZE-'].update(visible=True)
+    window[f'-LOGIN-'].update(visible=False)
+    window[f'-REGISTER-'].update(visible=False)
+    window[f'-ADD_ITEM-'].update(visible=False)
+
+# Display Login page
+def display_login_page():
     window['B_LOGIN'].update(visible=True)
     window['B_LOGIN_CANCEL'].update(visible=True)
     window['B_LOGIN_HOME'].update(visible=False)
+    window[f'-INITIALIZE-'].update(visible=False)
+    window[f'-LOGIN-'].update(visible=True)
+    window[f'-REGISTER-'].update(visible=False)
+    window[f'-ADD_ITEM-'].update(visible=False)
     
-# Initialize buttons in Registration page
-def init_register_buttons():
+# Display Registration page
+def display_register_page():
     window['B_REGISTER'].update(visible=True)
     window['B_REGISTER_CANCEL'].update(visible=True)
     window['B_REGISTER_HOME'].update(visible=False)
+    window[f'-INITIALIZE-'].update(visible=False)
+    window[f'-LOGIN-'].update(visible=False)
+    window[f'-REGISTER-'].update(visible=True)
+    window[f'-ADD_ITEM-'].update(visible=False)
 
-def login_success(firstName, lastName):
+# Display Add Item page
+def display_item_add_page():
+    window['B_ADD_ITEM'].update(visible=True)
+    window['B_ADD_ITEM_CANCEL'].update(visible=True)
+    window['B_ADD_ITEM_HOME'].update(visible=False)
+    window[f'-INITIALIZE-'].update(visible=False)
+    window[f'-LOGIN-'].update(visible=False)
+    window[f'-REGISTER-'].update(visible=False)
+    window[f'-ADD_ITEM-'].update(visible=True)
+
+def item_add_success():
+    window['-add_item_status-'].update("Item added successfully.", visible=True)
+    window['B_ADD_ITEM'].update(visible=False)
+    window['B_ADD_ITEM_CANCEL'].update(visible=False)
+    window['B_ADD_ITEM_HOME'].update(visible=True)
+
+def login_success(userName, firstName, lastName):
+    window['-login_status_text-'].update("Currently logged in as", visible=True)
+    window['-current_user-'].update(userName, visible=True)
     window['-login_status-'].update("Successfully logged in. Welcome back, {} {}!".format(firstName, lastName), visible=True)
     window['B_LOGIN'].update(visible=False)
     window['B_LOGIN_CANCEL'].update(visible=False)
@@ -162,9 +258,29 @@ def register_success():
     window['B_REGISTER_CANCEL'].update(visible=False)
     window['B_REGISTER_HOME'].update(visible=True)
 
+def validate_current_user():
+    return len(window['-current_user-'].get()) > 0
+
 # Validate inputs
 def validate_inputs(event, data):
-    if event == 'B_LOGIN':
+    if event == 'B_ADD_ITEM':
+        for input in ('-new_item_title-', '-new_item_description-', '-new_item_category-', '-new_item_price-'):
+            if (len(data[input]) == 0):
+                window['-add_item_status-'].update('Field(s) cannot be left blank.', visible=True)
+                return False
+            elif (input == '-new_item_title-' and len(data[input]) > 32):
+                window['-add_item_status-'].update('Title cannot exceed 32 characters.', visible=True)
+                return False
+            elif (input == '-new_item_description-' and len(data[input]) > 64):
+                window['-add_item_status-'].update('Description cannot exceed 64 characters.', visible=True)
+                return False
+            elif (input == '-new_item_category-' and len(data[input]) > 255):
+                window['-add_item_status-'].update('Category cannot exceed 255 characters.', visible=True)
+                return False
+            elif (input == '-new_item_price-' and validate_price(data[input]) is False):
+                window['-add_item_status-'].update('Price must be in proper format.', visible=True)
+                return False
+    elif event == 'B_LOGIN':
         for input in ('-login_username-', '-login_password-'):
             if len(data[input]) == 0:
                 window['-login_status-'].update('Field(s) cannot be left blank.', visible=True)
@@ -191,6 +307,16 @@ def validate_password(password, repeat_password):
     if (password != repeat_password):
         isValid = False
         window['-registration_status-'].update('Passwords do not match.', visible=True)
+    return isValid
+
+# Validate price
+def validate_price(price):
+    isValid = True
+    priceRegex = re.compile(r'^-?(0|[1-9][0-9]*)?(\.\d{1,2})?$')
+    matchedObject = priceRegex.search(price)
+    if matchedObject is None:
+        isValid = False
+
     return isValid
     
 # Validate username
@@ -226,41 +352,54 @@ def validate_email(email):
     return isValid
 
 sg.theme('DarkAmber') # Add a theme of color
+sg.set_options(font=('Arial', 24))
 # All the stuff inside the window
 layout_initialize = [
+    [sg.Text('', key='-login_status_text-', visible=False), sg.Text('', key='-current_user-', visible=False)],
     [sg.Button('Initialize Database', key='B_INIT_DB')],
     [sg.Button(button_text='Login', key='B_INIT_LOGIN'), sg.Button('Register', key='B_INIT_REGISTER')],
+    [sg.Button(button_text='Add Item', key='B_INIT_ADD_ITEM')],
     [sg.Text('', key='-status-', visible=False)]
 ]
 
-layout_register = [
-    [sg.Text('Username'), sg.InputText(key='-register_username-')],
-    [sg.Text('Password'), sg.InputText(key='-register_password-')],
-    [sg.Text('Re-enter password'), sg.InputText(key='-register_password2-')],
-    [sg.Text('First Name'), sg.InputText(key='-fname-')],
-    [sg.Text('Last Name'), sg.InputText(key='-lname-')],
-    [sg.Text('E-mail'), sg.InputText(key='-email-')],
-    [sg.Button(button_text='Submit', key='B_REGISTER'), sg.Button('Cancel', key='B_REGISTER_CANCEL'), sg.Button('Home', key='B_REGISTER_HOME', visible=False)],
-    [sg.Text('', key='-registration_status-', visible=False)]
+layout_item_add = [
+    [sg.Text('Title'), sg.InputText(key='-new_item_title-')],
+    [sg.Text('Description'), sg.InputText(key='-new_item_description-')],
+    [sg.Text('Category'), sg.InputText(key='-new_item_category-')],
+    [sg.Text('Price'), sg.InputText(key='-new_item_price-')],
+    [sg.Button(button_text='Submit', key='B_ADD_ITEM'), sg.Button('Cancel', key='B_ADD_ITEM_CANCEL'), sg.Button('Home', key='B_ADD_ITEM_HOME', visible=False)],
+    [sg.Text('', key='-add_item_status-', visible=False)]
 ]
 
 layout_login = [
-    [sg.Text('Username'), sg.InputText(key='-login_username-')],
-    [sg.Text('Password'), sg.InputText(key='-login_password-')],
+    [sg.Text('Username'), sg.InputText(size=(32, 1), key='-login_username-')],
+    [sg.Text('Password'), sg.InputText(size=(32, 1), key='-login_password-')],
     [sg.Button(button_text='Submit', key='B_LOGIN'), sg.Button('Cancel', key='B_LOGIN_CANCEL'), sg.Button('Home', key='B_LOGIN_HOME', visible=False)],
     [sg.Text('', key='-login_status-', visible=False)]
+]
+
+layout_register = [
+    [sg.Text('Username'), sg.InputText(size=(32, 1), key='-register_username-')],
+    [sg.Text('Password'), sg.InputText(size=(32, 1), key='-register_password-')],
+    [sg.Text('Re-enter password'), sg.InputText(size=(32, 1), key='-register_password2-')],
+    [sg.Text('First Name'), sg.InputText(size=(32, 1), key='-fname-')],
+    [sg.Text('Last Name'), sg.InputText(size=(32, 1), key='-lname-')],
+    [sg.Text('E-mail'), sg.InputText(key='-email-')],
+    [sg.Button(button_text='Submit', key='B_REGISTER'), sg.Button('Cancel', key='B_REGISTER_CANCEL'), sg.Button('Home', key='B_REGISTER_HOME', visible=False)],
+    [sg.Text('', key='-registration_status-', visible=False)]
 ]
 
 layout = [
     [
         sg.Column(layout_initialize, key='-INITIALIZE-'),
         sg.Column(layout_register, visible=False, key='-REGISTER-'),
-        sg.Column(layout_login, visible=False, key='-LOGIN-')
+        sg.Column(layout_login, visible=False, key='-LOGIN-'),
+        sg.Column(layout_item_add, visible=False, key='-ADD_ITEM-')
     ]
 ]
 
 # Create the Window
-window = sg.Window('COMP 440 - Course Project (Part 1)', layout)
+window = sg.Window('COMP 440 Course Project', layout)
 
 # Event loop to process "events" and get the "values" of the inputs
 while True:
@@ -270,32 +409,21 @@ while True:
         cnx.close()
         break
     else:
-        if event == 'B_INIT_LOGIN':
-            # Display Login page
-            init_login_buttons()
-            window[f'-INITIALIZE-'].update(visible=False)
-            window[f'-LOGIN-'].update(visible=True)
-            window[f'-REGISTER-'].update(visible=False)
-        elif event == 'B_INIT_REGISTER':
-            # Display Registration page
-            init_register_buttons()
-            window[f'-INITIALIZE-'].update(visible=False)
-            window[f'-LOGIN-'].update(visible=False)
-            window[f'-REGISTER-'].update(visible=True)
-        elif event == 'B_LOGIN': # User submits login credentials
+        if event == 'B_INIT_LOGIN': # User clicks 'Login' button
+            display_login_page()
+        elif event == 'B_INIT_REGISTER': # User clicks 'Register' button
+            display_register_page()
+        elif event == 'B_INIT_ADD_ITEM': # User clicks 'Add Item' button
+            display_item_add_page()
+        elif event == 'B_LOGIN': # User submits login credentials in 'Login' page
             login(event, values)
-        elif event == 'B_REGISTER': # User submits registration credentials
+        elif event == 'B_REGISTER': # User submits registration credentials in 'Registration' page
             register(event, values)
+        elif event == 'B_ADD_ITEM':
+            add_item(event, values)
         elif event == 'B_INIT_DB': # User clicks 'Initialize Database' button
             init_database()
-        else:
-            # Default: display home page
-            clear_inputs(values)
-            window['-login_status-'].update('', visible=False)
-            window['-registration_status-'].update('', visible=False)
-            window['-status-'].update('', visible=False)
-            window[f'-INITIALIZE-'].update(visible=True)
-            window[f'-LOGIN-'].update(visible=False)
-            window[f'-REGISTER-'].update(visible=False)
+        else: # Default home page
+            display_home_page(values)
     
 window.close()
