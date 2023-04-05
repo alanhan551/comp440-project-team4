@@ -57,8 +57,8 @@ DEFAULT_ROWS['item'] = (
 cnx = mysql.connector.connect(
     host="localhost",
     port=3306,
-    user="alanhan",
-    password="Superduperpassw0rd!",
+    user="ahan",
+    password="Adminpassw0rd!",
     database=DB_NAME)
 
 # Get a cursor
