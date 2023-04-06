@@ -1,3 +1,4 @@
+import configparser
 import mysql.connector
 from mysql.connector import errorcode
 import PySimpleGUI as sg
@@ -53,13 +54,18 @@ DEFAULT_ROWS['item'] = (
     "VALUES ('Smartphone', 'This is the new iPhone X', 'electronic, cellphone, apple', 1000, 'test1')"
 )
 
+# Read from server.ini
+config = configparser.ConfigParser()
+config.read('server.ini')
+server_config = config['DEFAULT']
+
 # Connect to server
 cnx = mysql.connector.connect(
-    host="localhost",
-    port=3306,
-    user="ahan",
-    password="Adminpassw0rd!",
-    database=DB_NAME)
+    host=server_config['Host'],
+    port=int(server_config['Port']),
+    user=server_config['User'],
+    password=server_config['Password'],
+    database=server_config['Database'])
 
 # Get a cursor
 cursor = cnx.cursor(buffered=True)
