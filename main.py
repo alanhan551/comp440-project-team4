@@ -4,9 +4,6 @@ from mysql.connector import errorcode
 import PySimpleGUI as sg
 import re
 
-
-DB_NAME = 'course_project'
-
 TABLES = {}
 
 DEFAULT_ROWS = {}
@@ -75,11 +72,11 @@ cursor = cnx.cursor(buffered=True)
 def init_database():
     try:
         # Initialize 'course_project' database
-        cursor.execute("""Use %s""", (DB_NAME,))
+        cursor.execute("""Use %s""", (server_config['Database'],))
     except mysql.connector.Error as err:
         if err.errno == errorcode.ER_BAD_DB_ERROR:
             create_database(cursor)
-            cnx.database = DB_NAME
+            cnx.database = server_config['Database']
         else:
             window['-status-'].update("Error: {}".format(err), visible=True)
     finally:
@@ -88,7 +85,7 @@ def init_database():
 # Create database
 def create_database():
     try:
-        cursor.execute("""CREATE DATABASE %s DEFAULT CHARACTER SET 'utf8mb4'""", (DB_NAME,))
+        cursor.execute("""CREATE DATABASE %s DEFAULT CHARACTER SET 'utf8mb4'""", (server_config['Database'],))
     except mysql.connector.Error as err:
         window['-status'].update("Failed creating database: {}".format(err), visible=True)
 
