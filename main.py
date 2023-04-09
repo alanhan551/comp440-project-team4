@@ -182,8 +182,6 @@ def search(search_event,data):
         #output.append(str(entry))
       #result ='\n'.join(output)
         window['-TABLE-'].update(table, visible=True)
-        for num in ID_STORAGE:
-            print(num)
 
     else:
        window['-TABLE-'].update(data, visible=False)
