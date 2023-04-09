@@ -2,13 +2,11 @@ import configparser
 import mysql.connector
 from mysql.connector import errorcode
 import PySimpleGUI as sg
+from tabulate import tabulate
 import re
 
-
-DB_NAME = 'course_project'
-
 TABLES = {}
-
+ID_STORAGE = []
 DEFAULT_ROWS = {}
 
 TABLES['user'] = (
@@ -75,11 +73,11 @@ cursor = cnx.cursor(buffered=True)
 def init_database():
     try:
         # Initialize 'course_project' database
-        cursor.execute("""Use %s""", (DB_NAME,))
+        cursor.execute("""Use %s""", (server_config['Database'],))
     except mysql.connector.Error as err:
         if err.errno == errorcode.ER_BAD_DB_ERROR:
             create_database(cursor)
-            cnx.database = DB_NAME
+            cnx.database = server_config['Database']
         else:
             window['-status-'].update("Error: {}".format(err), visible=True)
     finally:
@@ -88,7 +86,7 @@ def init_database():
 # Create database
 def create_database():
     try:
-        cursor.execute("""CREATE DATABASE %s DEFAULT CHARACTER SET 'utf8mb4'""", (DB_NAME,))
+        cursor.execute("""CREATE DATABASE %s DEFAULT CHARACTER SET 'utf8mb4'""", (server_config['Database'],))
     except mysql.connector.Error as err:
         window['-status'].update("Failed creating database: {}".format(err), visible=True)
 
@@ -169,9 +167,25 @@ def login(login_event, data):
             window['-login_status-'].update("Failed to login: {}".format(err), visible=True)
 
 def search(search_event,data):
-    data_entered = (data['-category-'],)
-    cursor.execute("Select* FROM item where category=%s", data_entered)
-    result = cursor.fetchall()
+    if data['-category-']:
+        data_entered = ("%"+ data['-category-']+ "%",)
+        cursor.execute("SELECT id, title, description, category, price FROM item where LENGTH(category)>1 AND category like %s", data_entered)
+        result = cursor.fetchall()
+        output = []
+        ID_STORAGE.clear()
+        for row in result:
+            ID_STORAGE.append(row[0])
+            new_price = "${:,.2f}".format(row[4])
+            output.append([row[1], row[2], row[3], new_price])
+        table = tabulate(output, headers=["Title                  ", "          Description               ",
+                                          "         Category                        ", "                    Price     "])
+        #output.append(str(entry))
+      #result ='\n'.join(output)
+        window['-TABLE-'].update(table, visible=True)
+
+    else:
+       window['-TABLE-'].update(data, visible=False)
+
 
 # Insert user inputted data into new row within table 'user'
 def register(register_event, data):
@@ -246,6 +260,10 @@ def search_button():
     window['B_SEARCH'].update(visible=True)
     window['B_LOGIN_CANCEL'].update(visible=False)
     window['B_LOGIN_HOME'].update(visible=True)
+    window['TABLE'].update(visible=False)
+
+
+
 
 # Display Add Item page
 def display_item_add_page():
@@ -400,8 +418,9 @@ layout_login = [
 ]
 
 layout_search = [
-    [sg.Text('Search'), sg.InputText(key='-category-')],
-    [sg.Button(button_text='Search', key='B_SEARCH'), sg.Button('Cancel', key='B_SEARCH_CANCEL')]
+    [sg.Text('Search by Category'), sg.InputText(key='-category-')],
+    [sg.Button(button_text='Search', key='B_SEARCH_2'), sg.Button('Cancel', key='B_SEARCH_CANCEL')],
+    [sg.Text(key="-TABLE-")]
 ]
 
 layout_register = [
@@ -455,6 +474,9 @@ while True:
             window[f'-LOGIN-'].update(visible=False)
             window[f'-REGISTER-'].update(visible=False)
             window[f'-SEARCH-'].update(visible=True)
+            window[f'-TABLE-'].update(visible=False)
+        elif event == 'B_SEARCH_2':
+            search(event, values)
         else: # Default home page
             display_home_page(values)
     
