@@ -1,7 +1,9 @@
+import configparser
 import mysql.connector
 from mysql.connector import errorcode
 import PySimpleGUI as sg
 import re
+
 
 DB_NAME = 'course_project'
 
@@ -53,13 +55,18 @@ DEFAULT_ROWS['item'] = (
     "VALUES ('Smartphone', 'This is the new iPhone X', 'electronic, cellphone, apple', 1000, 'test1')"
 )
 
+# Read from server.ini
+config = configparser.ConfigParser()
+config.read('server.ini')
+server_config = config['DEFAULT']
+
 # Connect to server
 cnx = mysql.connector.connect(
-    host="localhost",
-    port=3306,
-    user="Backup",
-    password="Ingoditrust123!",
-    database=DB_NAME)
+    host=server_config['Host'],
+    port=int(server_config['Port']),
+    user=server_config['User'],
+    password=server_config['Password'],
+    database=server_config['Database'])
 
 # Get a cursor
 cursor = cnx.cursor(buffered=True)
@@ -147,7 +154,6 @@ def add_item(item_event, data):
 # Verify row exists within 'user' table
 def login(login_event, data):
     valid_inputs = False
-    
     valid_inputs = validate_inputs(login_event, data)
     
     if valid_inputs:
@@ -161,7 +167,12 @@ def login(login_event, data):
                     login_success(username, fname, lname)
         except mysql.connector.Error as err:
             window['-login_status-'].update("Failed to login: {}".format(err), visible=True)
-    
+
+def search(search_event,data):
+    data_entered = (data['-category-'],)
+    cursor.execute("Select* FROM item where category=%s", data_entered)
+    result = cursor.fetchall()
+
 # Insert user inputted data into new row within table 'user'
 def register(register_event, data):
     valid_inputs = False
@@ -207,6 +218,7 @@ def display_home_page(values):
     window[f'-LOGIN-'].update(visible=False)
     window[f'-REGISTER-'].update(visible=False)
     window[f'-ADD_ITEM-'].update(visible=False)
+    window[f'-SEARCH-'].update(visible=False)
 
 # Display Login page
 def display_login_page():
@@ -217,6 +229,7 @@ def display_login_page():
     window[f'-LOGIN-'].update(visible=True)
     window[f'-REGISTER-'].update(visible=False)
     window[f'-ADD_ITEM-'].update(visible=False)
+    window[f'-SEARCH-'].update(visible=False)
     
 # Display Registration page
 def display_register_page():
@@ -227,6 +240,12 @@ def display_register_page():
     window[f'-LOGIN-'].update(visible=False)
     window[f'-REGISTER-'].update(visible=True)
     window[f'-ADD_ITEM-'].update(visible=False)
+    window[f'-SEARCH-'].update(visible=False)
+
+def search_button():
+    window['B_SEARCH'].update(visible=True)
+    window['B_LOGIN_CANCEL'].update(visible=False)
+    window['B_LOGIN_HOME'].update(visible=True)
 
 # Display Add Item page
 def display_item_add_page():
@@ -237,6 +256,7 @@ def display_item_add_page():
     window[f'-LOGIN-'].update(visible=False)
     window[f'-REGISTER-'].update(visible=False)
     window[f'-ADD_ITEM-'].update(visible=True)
+    window[f'-SEARCH-'].update(visible=False)
 
 def item_add_success():
     window['-add_item_status-'].update("Item added successfully.", visible=True)
@@ -251,7 +271,7 @@ def login_success(userName, firstName, lastName):
     window['B_LOGIN'].update(visible=False)
     window['B_LOGIN_CANCEL'].update(visible=False)
     window['B_LOGIN_HOME'].update(visible=True)
-    
+
 def register_success():
     window['-registration_status-'].update("Registration successful.", visible=True)
     window['B_REGISTER'].update(visible=False)
@@ -359,6 +379,7 @@ layout_initialize = [
     [sg.Button('Initialize Database', key='B_INIT_DB')],
     [sg.Button(button_text='Login', key='B_INIT_LOGIN'), sg.Button('Register', key='B_INIT_REGISTER')],
     [sg.Button(button_text='Add Item', key='B_INIT_ADD_ITEM')],
+    [sg.Button(button_text='Search', key='B_SEARCH')],
     [sg.Text('', key='-status-', visible=False)]
 ]
 
@@ -378,6 +399,11 @@ layout_login = [
     [sg.Text('', key='-login_status-', visible=False)]
 ]
 
+layout_search = [
+    [sg.Text('Search'), sg.InputText(key='-category-')],
+    [sg.Button(button_text='Search', key='B_SEARCH'), sg.Button('Cancel', key='B_SEARCH_CANCEL')]
+]
+
 layout_register = [
     [sg.Text('Username'), sg.InputText(size=(32, 1), key='-register_username-')],
     [sg.Text('Password'), sg.InputText(size=(32, 1), key='-register_password-')],
@@ -394,7 +420,8 @@ layout = [
         sg.Column(layout_initialize, key='-INITIALIZE-'),
         sg.Column(layout_register, visible=False, key='-REGISTER-'),
         sg.Column(layout_login, visible=False, key='-LOGIN-'),
-        sg.Column(layout_item_add, visible=False, key='-ADD_ITEM-')
+        sg.Column(layout_item_add, visible=False, key='-ADD_ITEM-'),
+        sg.Column(layout_search, visible=False, key='-SEARCH-')
     ]
 ]
 
@@ -423,6 +450,11 @@ while True:
             add_item(event, values)
         elif event == 'B_INIT_DB': # User clicks 'Initialize Database' button
             init_database()
+        elif event == 'B_SEARCH': # User enters text to search
+            window[f'-INITIALIZE-'].update(visible=False)
+            window[f'-LOGIN-'].update(visible=False)
+            window[f'-REGISTER-'].update(visible=False)
+            window[f'-SEARCH-'].update(visible=True)
         else: # Default home page
             display_home_page(values)
     
