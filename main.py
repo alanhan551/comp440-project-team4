@@ -43,7 +43,7 @@ TABLES['review'] = (
     "   `id` INT NOT NULL AUTO_INCREMENT,"
     "   `insert_user` varchar(32) NOT NULL,"
     "   `item_id` INT NOT NULL,"
-    "   `rating_review` ENUM('excellent', 'good', 'fair', 'poor') NOT NULL,"
+    "   `rating_review` ENUM('Excellent', 'Good', 'Fair', 'Poor') NOT NULL,"
     "   `review_description` varchar(64) NOT NULL,"
     "   `insert_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
     "   FOREIGN KEY(`insert_user`) REFERENCES `user`(`username`),"
@@ -65,8 +65,18 @@ DEFAULT_ROWS['user'] = (
 DEFAULT_ROWS['item'] = (
     "INSERT INTO item "
     "(title, description, category, price, insert_user) "
-    "VALUES ('Smartphone', 'This is the new iPhone X', 'electronic, cellphone, apple', 1000, 'test1')"
+    "VALUES ('Wireless Earbuds', 'Bluetooth 5.0 Wireless Earbuds', 'Electronics', 70, 'test1'), "
+    "       ('Smart Watch', 'Apple Watch Series 6', 'Electronics', 400, 'test2'), "
+    "       ('Gaming Console', 'Sony PlayStation 5', 'Electronics', 500, 'test3'), "
+    "       ('Crime Fiction Novel', 'Best-selling Crime Fiction Book', 'Books', 15, 'test1'), "
+    "       ('Mystery Novel', 'Suspenseful Mystery Book', 'Books', 18, 'test2'), "
+    "       ('Science Fiction Novel', 'Imaginative Sci-Fi Book', 'Books', 20, 'test3'), "
+    "       ('Sweatshirt', 'Warm Cotton Sweatshirt', 'Clothing', 35, 'test1'), "
+    "       ('Jacket', 'Stylish Winter Jacket', 'Clothing', 90, 'test2'), "
+    "       ('Boots', 'Waterproof Hiking Boots', 'Clothing', 120, 'test3')"
 )
+
+
 DEFAULT_ROWS['review'] = (
     "INSERT INTO review "
     "(insert_user, item_id, rating_review, review_description) "
@@ -78,7 +88,7 @@ DEFAULT_ROWS['review'] = (
 config = configparser.ConfigParser()
 config.read('server.ini')
 # server_config = config['DEFAULT']
-server_config = config['server']
+server_config = config['DEFAULT']
 # Connect to server
 cnx = mysql.connector.connect(
     host=server_config['Host'],
@@ -132,12 +142,18 @@ def create_tables():
 # Clear table and insert default values
 def set_default_values(table):
     try:
+        # Disable foreign key checks
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+        # Truncate the table
         cursor.execute("""TRUNCATE TABLE {}""".format(table))
+        # Insert default rows
         cursor.execute(DEFAULT_ROWS[table])
-
-        # Make sure data is committed to the database
+        # Enable foreign key checks
+        cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+        # Commit the changes
         cnx.commit()
     except mysql.connector.Error as err:
+        print(err)
         window['-status-'].update("Failed inserting default values for table '{}': {}".format(table, err))
 
 
@@ -181,6 +197,7 @@ def add_item(item_event, data):
 
 
 def search(search_event, data):
+    item_titles = []
     if data['-category-']:
         data_entered = ("%" + data['-category-'] + "%",)
         cursor.execute(
@@ -193,13 +210,15 @@ def search(search_event, data):
             ID_STORAGE.append(row[0])
             new_price = "${:,.2f}".format(row[4])
             output.append([row[1], row[2], row[3], new_price])
+            item_titles.append(row[1])
         table = tabulate(output, headers=["Title                  ", "          Description               ",
                                           "         Category                        ",
                                           "                    Price     "])
-        # output.append(str(entry))
-        # result ='\n'.join(output)
+        
+        print(item_titles)
+        window['-items_dropdown-'].update(values=item_titles)
         window['-TABLE-'].update(table, visible=True)
-
+        
     else:
         window['-TABLE-'].update(data, visible=False)
 
@@ -330,14 +349,10 @@ def get_items():
     return items
 
 
-
-
-
 def display_show_reviews_page():
     
     window['-INITIALIZE-'].update(visible=False)
     window['-DISPLAY_REVIEWS-'].update(visible=True)
-
 
 
 # Validate inputs
@@ -474,42 +489,48 @@ def submit_review(item_event, data):
         valid_user = validate_current_user()
         if valid_user:
             username = window['-current_user-'].get()
-
+        
             selected_item_title = values["-items_dropdown-"]
             selected_item_id = next((item[0] for item in items if item[1] == selected_item_title), None)
             rating = values["-rating_dropdown-"]
             review_description = values["-review_description-"]
-            cursor.execute("""SELECT insert_user FROM item WHERE id = %s""", (selected_item_id,))
-            item_owner_id = cursor.fetchone()
-            if item_owner_id and item_owner_id[0] == username:
-                window["-review_status-"].update("You cannot review your own item.", visible=True)
-            else:
-                # Check if the user has already submitted 3 reviews today
             
-                try:
-                    
-                    cursor.execute("""
-                                                 SELECT COUNT(*) FROM review 
-                                                 WHERE insert_user = %s AND insert_date >= CURRENT_DATE() AND insert_date < CURRENT_DATE() + INTERVAL 1 DAY
-                                                 """, (username,))
-                    daily_review_count = cursor.fetchone()[0]
-                except mysql.connector.Error as err:
-                    print("MySQL error during second query:", err)
-                    daily_review_count = 0
-
-                if daily_review_count >= 3:
-                    window["-review_status-"].update("You have reached the maximum limit of 3 reviews per day.", visible=True)
-                    window.refresh()
+            # Check the review_description is within 64 character
+            if(len(review_description)>64):
+                window["-review_status-"].update("Description cannot have more than 64 characters!", visible=True)
+                window.refresh()
+            else:
+                cursor.execute("""SELECT insert_user FROM item WHERE id = %s""", (selected_item_id,))
+                item_owner_id = cursor.fetchone()
+                if item_owner_id and item_owner_id[0] == username:
+                    window["-review_status-"].update("You cannot review your own item.", visible=True)
                 else:
+                    # Check if the user has already submitted 3 reviews today
+
                     try:
-                        cursor.execute(
-                            """INSERT INTO review (insert_user, item_id, rating_review, review_description, insert_date) VALUES (%s, %s, %s, %s, NOW())""",
-                            (username, selected_item_id, rating, review_description))
-                        cnx.commit()
-                        window["-review_status-"].update("Review submitted successfully.", visible=True)
-                        window.refresh()
+
+                        cursor.execute("""
+                                                     SELECT COUNT(*) FROM review 
+                                                     WHERE insert_user = %s AND insert_date >= CURRENT_DATE() AND insert_date < CURRENT_DATE() + INTERVAL 1 DAY
+                                                     """, (username,))
+                        daily_review_count = cursor.fetchone()[0]
                     except mysql.connector.Error as err:
-                        window["-review_status-"].update(f"Failed to submit review: {err}", visible=True)
+                        print("MySQL error during second query:", err)
+                        daily_review_count = 0
+
+                    if daily_review_count >= 3:
+                        window["-review_status-"].update("You have reached the maximum limit of 3 reviews per day.", visible=True)
+                        window.refresh()
+                    else:
+                        try:
+                            cursor.execute(
+                                """INSERT INTO review (insert_user, item_id, rating_review, review_description, insert_date) VALUES (%s, %s, %s, %s, NOW())""",
+                                (username, selected_item_id, rating, review_description))
+                            cnx.commit()
+                            window["-review_status-"].update("Review submitted successfully.", visible=True)
+                            window.refresh()
+                        except mysql.connector.Error as err:
+                            window["-review_status-"].update(f"Failed to submit review: {err}", visible=True)
         else:
             window["-review_status-"].update("No user is currently logged in.", visible=True)
             window.refresh()
@@ -521,14 +542,12 @@ sg.theme('DarkAmber')  # Add a theme of color
 sg.set_options(font=('Arial', 24))
 # All the stuff inside the window
 
-items = get_items()
-item_titles = [item[1] for item in items]
+
 layout_initialize = [
     [sg.Text('', key='-login_status_text-', visible=False), sg.Text('', key='-current_user-', visible=False)],
     [sg.Button('Initialize Database', key='B_INIT_DB')],
     [sg.Button(button_text='Login', key='B_INIT_LOGIN'), sg.Button('Register', key='B_INIT_REGISTER')],
     [sg.Button(button_text='Add Item', key='B_INIT_ADD_ITEM')],
-    [sg.Button(button_text='Write a Review', key='B_INIT_REVIEW')],
     [sg.Button(button_text='Show Reviews', key='B_INIT_SHOW_REVIEWS')],
     [sg.Button(button_text='Search', key='B_SEARCH')],
     [sg.Text('', key='-status-', visible=False)]
@@ -554,7 +573,12 @@ layout_login = [
 
 layout_search = [
     [sg.Text('Search by Category'), sg.InputText(key='-category-')],
-    [sg.Button(button_text='Search', key='B_SEARCH_2'), sg.Button('Cancel', key='B_SEARCH_CANCEL')],
+    [sg.Button(button_text='Search', key='B_SEARCH_2'), sg.Button('Cancel', key='B_SEARCH_CANCEL'),sg.Button(button_text='Write a Review', key='B_INIT_REVIEW')],
+    [sg.Text("Select Item"), sg.Combo(["******************"], key="-items_dropdown-", readonly=True)],
+    [sg.Text("Rating"), sg.Combo(["Excellent", "Good", "Fair", "Poor"], key="-rating_dropdown-", readonly=True)],
+    [sg.Text("Description"), sg.InputText(key="-review_description-")],
+    [sg.Button("Submit", key="B_REVIEW_SUBMIT"), sg.Button("Home", key="B_REVIEW_CANCEL")],
+    [sg.Text("", key="-review_status-", visible=False)],
     [sg.Text(key="-TABLE-")]
 ]
 
@@ -567,22 +591,25 @@ layout_register = [
     [sg.Text('E-mail'), sg.InputText(key='-email-')],
     [sg.Button(button_text='Submit', key='B_REGISTER'), sg.Button('Cancel', key='B_REGISTER_CANCEL'),
      sg.Button('Home', key='B_REGISTER_HOME', visible=False)],
+  
     [sg.Text('', key='-registration_status-', visible=False)]
 ]
-print(item_titles)
+
+
   # Extract item titles from the items list
 layout_review = [
-    [sg.Text("Select Item"), sg.Combo(item_titles, key="-items_dropdown-", readonly=True)],
-    [sg.Text("Rating"), sg.Combo(["excellent", "good", "fair", "poor"], key="-rating_dropdown-", readonly=True)],
+    [sg.Text("Select Item"), sg.Combo(["******************"], key="-items_dropdown-", readonly=True)],
+    [sg.Text("Rating"), sg.Combo(["Excellent", "Good", "Fair", "Poor"], key="-rating_dropdown-", readonly=True)],
     [sg.Text("Description"), sg.InputText(key="-review_description-")],
-    [sg.Button("Submit", key="B_REVIEW_SUBMIT"), sg.Button("Home", key="B_REVIEW_CANCEL"),
-     sg.Button("Home", key="B_REVIEW_HOME",visible=False)],
+    [sg.Button("Submit", key="B_REVIEW_SUBMIT"), sg.Button("Home", key="B_REVIEW_CANCEL")],
     [sg.Text("", key="-review_status-", visible=False)]
 ]
 
+items = get_items()
+item_titles = [item[1] for item in items]
 layout_display_reviews = [
     [sg.Text("Select Item"), sg.Combo(item_titles, key="-items_dropdown_reviews-", readonly=True)],
-    [sg.Button("Show Reviews", key="B_SHOW_REVIEWS"), sg.Button("Cancel", key="B_SHOW_REVIEWS_CANCEL"),
+    [sg.Button("Show Reviews", key="B_SHOW_REVIEWS"), sg.Button("Home", key="B_SHOW_REVIEWS_CANCEL"),
      sg.Button("Home", key="B_SHOW_REVIEWS_HOME", visible=False)],
     [sg.Text("", key="-reviews_status-", visible=False)],
     [sg.Multiline(size=(60, 15), key="-reviews_display-", disabled=True, visible=False)],
@@ -664,7 +691,10 @@ while True:
             window[f'-LOGIN-'].update(visible=False)
             window[f'-REGISTER-'].update(visible=False)
             window[f'-SEARCH-'].update(visible=True)
+            window[f'B_INIT_REVIEW'].update(visible=False)
             window[f'-TABLE-'].update(visible=False)
+            
+
         elif event == 'B_SEARCH_2':
             search(event, values)
         elif event == 'B_INIT_REVIEW':  # User clicks 'Write a Review' button
