@@ -87,7 +87,6 @@ DEFAULT_ROWS['review'] = (
 # Read from server.ini
 config = configparser.ConfigParser()
 config.read('server.ini')
-# server_config = config['DEFAULT']
 server_config = config['DEFAULT']
 # Connect to server
 cnx = mysql.connector.connect(
@@ -153,7 +152,6 @@ def set_default_values(table):
         # Commit the changes
         cnx.commit()
     except mysql.connector.Error as err:
-        print(err)
         window['-status-'].update("Failed inserting default values for table '{}': {}".format(table, err))
 
 
@@ -214,8 +212,7 @@ def search(search_event, data):
         table = tabulate(output, headers=["Title                  ", "          Description               ",
                                           "         Category                        ",
                                           "                    Price     "])
-        
-        print(item_titles)
+
         window['-items_dropdown-'].update(values=item_titles)
         window['-TABLE-'].update(table, visible=True)
         
@@ -479,9 +476,12 @@ def login_success(userName, firstName, lastName):
     window['-current_user-'].update(userName, visible=True)
     window['-login_status-'].update("Successfully logged in. Welcome back, {} {}!".format(firstName, lastName),
                                     visible=True)
+    window['B_INIT_ADD_ITEM'].update(visible=True)
+    window['B_INIT_SHOW_REVIEWS'].update(visible=True)
     window['B_LOGIN'].update(visible=False)
     window['B_LOGIN_CANCEL'].update(visible=False)
     window['B_LOGIN_HOME'].update(visible=True)
+    window['B_SEARCH'].update(visible=True)
 
 
 def submit_review(item_event, data):
@@ -515,7 +515,6 @@ def submit_review(item_event, data):
                                                      """, (username,))
                         daily_review_count = cursor.fetchone()[0]
                     except mysql.connector.Error as err:
-                        print("MySQL error during second query:", err)
                         daily_review_count = 0
 
                     if daily_review_count >= 3:
@@ -547,9 +546,9 @@ layout_initialize = [
     [sg.Text('', key='-login_status_text-', visible=False), sg.Text('', key='-current_user-', visible=False)],
     [sg.Button('Initialize Database', key='B_INIT_DB')],
     [sg.Button(button_text='Login', key='B_INIT_LOGIN'), sg.Button('Register', key='B_INIT_REGISTER')],
-    [sg.Button(button_text='Add Item', key='B_INIT_ADD_ITEM')],
-    [sg.Button(button_text='Show Reviews', key='B_INIT_SHOW_REVIEWS')],
-    [sg.Button(button_text='Search', key='B_SEARCH')],
+    [sg.Button(button_text='Add Item', visible=False, key='B_INIT_ADD_ITEM')],
+    [sg.Button(button_text='Show Reviews', visible=False, key='B_INIT_SHOW_REVIEWS')],
+    [sg.Button(button_text='Search', visible=False, key='B_SEARCH')],
     [sg.Text('', key='-status-', visible=False)]
 ]
 
@@ -574,12 +573,12 @@ layout_login = [
 layout_search = [
     [sg.Text('Search by Category'), sg.InputText(key='-category-')],
     [sg.Button(button_text='Search', key='B_SEARCH_2'), sg.Button('Cancel', key='B_SEARCH_CANCEL'),sg.Button(button_text='Write a Review', key='B_INIT_REVIEW')],
+    [sg.Text(key="-TABLE-")],
     [sg.Text("Select Item"), sg.Combo(["******************"], key="-items_dropdown-", readonly=True)],
     [sg.Text("Rating"), sg.Combo(["Excellent", "Good", "Fair", "Poor"], key="-rating_dropdown-", readonly=True)],
     [sg.Text("Description"), sg.InputText(key="-review_description-")],
     [sg.Button("Submit", key="B_REVIEW_SUBMIT"), sg.Button("Home", key="B_REVIEW_CANCEL")],
-    [sg.Text("", key="-review_status-", visible=False)],
-    [sg.Text(key="-TABLE-")]
+    [sg.Text("", key="-review_status-", visible=False)]
 ]
 
 layout_register = [
@@ -700,7 +699,6 @@ while True:
         elif event == 'B_INIT_REVIEW':  # User clicks 'Write a Review' button
             display_review_page()
         elif event == 'B_REVIEW_SUBMIT':
-            print("Calling submit_review")
             submit_review(event,values)
             window.refresh()
         elif event == 'B_INIT_SHOW_REVIEWS':  # User clicks 'Show Reviews' button
