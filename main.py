@@ -9,7 +9,6 @@ current_user = None
 TABLES = {}
 ID_STORAGE = []
 DEFAULT_ROWS = {}
-item_titles = []
 
 TABLES['user'] = (
     "CREATE TABLE IF NOT EXISTS `user` ("
@@ -294,7 +293,8 @@ def display_register_page():
     window[f'-REGISTER-'].update(visible=True)
     window[f'-ADD_ITEM-'].update(visible=False)
     window[f'-SEARCH-'].update(visible=False)
-    
+
+
 def display_review_page():
     
     window['-INITIALIZE-'].update(visible=False)
@@ -304,6 +304,7 @@ def display_review_page():
     window['-SEARCH-'].update(visible=False)
     window['-REVIEW-'].update(visible=True)
     window['B_REVIEW_CANCEL'].update(visible=True)
+
 
 def search_button():
     window['B_SEARCH'].update(visible=True)
@@ -322,7 +323,8 @@ def display_item_add_page():
     window[f'-REGISTER-'].update(visible=False)
     window[f'-ADD_ITEM-'].update(visible=True)
     window[f'-SEARCH-'].update(visible=False)
-    
+
+
 def item_add_success():
     window['-add_item_status-'].update("Item added successfully.", visible=True)
     window['B_ADD_ITEM'].update(visible=False)
@@ -340,14 +342,48 @@ def register_success():
 def validate_current_user():
     return len(window['-current_user-'].get()) > 0
 
+
 def get_items():
     cursor.execute("""SELECT id, title FROM item""")
     items = cursor.fetchall()
     return items
 
 
-def display_show_reviews_page():
+def display_reviews(item_title):
+    items = get_items()
+    selected_item_id = next((item[0] for item in items if item[1] == item_title), None)
     
+    if selected_item_id:
+        try:
+            cursor.execute("""SELECT rating_review, review_description, insert_user, insert_date FROM review WHERE item_id = %s ORDER BY insert_date DESC""",
+                           (selected_item_id,))
+            reviews = cursor.fetchall()
+            if not reviews:
+                window['-reviews_display-'].update("", visible=True)
+                window['-reviews_status-'].update(f"No reviews found for this item '{item_title}'", visible=True)
+                
+            else:
+                formatted_reviews = ""
+                i = 1
+                for review in reviews:
+                    formatted_reviews += f"Review({i}):\n\tUser: {review[2]}\n\tDate: {review[3]}\n\tRating: {review[0]}\n\tDescription: {review[1]}\n\n"
+                    i+=1
+                window['-reviews_display-'].update(formatted_reviews, visible=True)
+                window['-reviews_status-'].update("", visible=False)
+        except mysql.connector.Error as err:
+            window["-reviews_status-"].update(f"Failed to fetch reviews: {err}", visible=True)
+            
+    else:
+        if(item_title==""):
+            window["-reviews_status-"].update(f"No item Selected ", visible=True)
+        else:
+            window["-reviews_status-"].update(f"No item found with name '{item_title}'", visible=True)
+
+
+def display_show_reviews_page():
+    items = get_items()
+    item_titles = [item[1] for item in items]
+    window['-items_dropdown_reviews-'].update(values=item_titles)
     window['-INITIALIZE-'].update(visible=False)
     window['-DISPLAY_REVIEWS-'].update(visible=True)
 
@@ -490,6 +526,7 @@ def submit_review(item_event, data):
         if valid_user:
             username = window['-current_user-'].get()
         
+            items = get_items()
             selected_item_title = values["-items_dropdown-"]
             selected_item_id = next((item[0] for item in items if item[1] == selected_item_title), None)
             rating = values["-rating_dropdown-"]
@@ -540,7 +577,6 @@ def submit_review(item_event, data):
 sg.theme('DarkAmber')  # Add a theme of color
 sg.set_options(font=('Arial', 24))
 # All the stuff inside the window
-
 
 layout_initialize = [
     [sg.Text('', key='-login_status_text-', visible=False), sg.Text('', key='-current_user-', visible=False)],
@@ -594,8 +630,7 @@ layout_register = [
     [sg.Text('', key='-registration_status-', visible=False)]
 ]
 
-
-  # Extract item titles from the items list
+# Extract item titles from the items list
 layout_review = [
     [sg.Text("Select Item"), sg.Combo(["******************"], key="-items_dropdown-", readonly=True)],
     [sg.Text("Rating"), sg.Combo(["Excellent", "Good", "Fair", "Poor"], key="-rating_dropdown-", readonly=True)],
@@ -604,16 +639,13 @@ layout_review = [
     [sg.Text("", key="-review_status-", visible=False)]
 ]
 
-items = get_items()
-item_titles = [item[1] for item in items]
 layout_display_reviews = [
-    [sg.Text("Select Item"), sg.Combo(item_titles, key="-items_dropdown_reviews-", readonly=True)],
+    [sg.Text("Select Item"), sg.Combo(["******************"], key="-items_dropdown_reviews-", readonly=True)],
     [sg.Button("Show Reviews", key="B_SHOW_REVIEWS"), sg.Button("Home", key="B_SHOW_REVIEWS_CANCEL"),
      sg.Button("Home", key="B_SHOW_REVIEWS_HOME", visible=False)],
     [sg.Text("", key="-reviews_status-", visible=False)],
     [sg.Multiline(size=(60, 15), key="-reviews_display-", disabled=True, visible=False)],
 ]
-
 
 layout = [
     [
@@ -626,39 +658,6 @@ layout = [
         sg.Column(layout_display_reviews, visible=False, key="-DISPLAY_REVIEWS-")
     ]
 ]
-
-
-def display_reviews(item_title):
-    selected_item_id = next((item[0] for item in items if item[1] == item_title), None)
-    
-    if selected_item_id:
-        try:
-            cursor.execute("""SELECT rating_review, review_description, insert_user, insert_date FROM review WHERE item_id = %s ORDER BY insert_date DESC""",
-                           (selected_item_id,))
-            reviews = cursor.fetchall()
-            if not reviews:
-                window['-reviews_display-'].update("", visible=True)
-                window['-reviews_status-'].update(f"No reviews found for this item '{item_title}'", visible=True)
-                
-            else:
-                formatted_reviews = ""
-                i = 1
-                for review in reviews:
-                    formatted_reviews += f"Review({i}):\n\tUser: {review[2]}\n\tDate: {review[3]}\n\tRating: {review[0]}\n\tDescription: {review[1]}\n\n"
-                    i+=1
-                window['-reviews_display-'].update(formatted_reviews, visible=True)
-                window['-reviews_status-'].update("", visible=False)
-        except mysql.connector.Error as err:
-            window["-reviews_status-"].update(f"Failed to fetch reviews: {err}", visible=True)
-            
-    else:
-        if(item_title==""):
-            window["-reviews_status-"].update(f"No item Selected ", visible=True)
-        else:
-            window["-reviews_status-"].update(f"No item found with name '{item_title}'", visible=True)
-        
-
-
 
 # Create the Window
 window = sg.Window('COMP 440 Course Project', layout)
@@ -692,8 +691,6 @@ while True:
             window[f'-SEARCH-'].update(visible=True)
             window[f'B_INIT_REVIEW'].update(visible=False)
             window[f'-TABLE-'].update(visible=False)
-            
-
         elif event == 'B_SEARCH_2':
             search(event, values)
         elif event == 'B_INIT_REVIEW':  # User clicks 'Write a Review' button
@@ -705,7 +702,6 @@ while True:
             display_show_reviews_page()
         elif event == 'B_SHOW_REVIEWS':  # User selects an item and clicks 'Show Reviews'
             display_reviews(values['-items_dropdown_reviews-'])
-
         else:  # Default home page
             display_home_page(values)
 
