@@ -3,9 +3,8 @@ import mysql.connector
 from mysql.connector import errorcode
 import PySimpleGUI as sg
 from tabulate import tabulate
-import datetime
 import re
-current_user = None
+
 TABLES = {}
 ID_STORAGE = []
 DEFAULT_ROWS = {}
@@ -79,7 +78,11 @@ DEFAULT_ROWS['item'] = (
 DEFAULT_ROWS['review'] = (
     "INSERT INTO review "
     "(insert_user, item_id, rating_review, review_description) "
-    "VALUES ('test1', 1, 'good', 'The new iPhone X is good, but not exceptional')"
+    "VALUES ('test1', 2, 'Good', 'The new iPhone X is good, but not exceptional'), "
+    "       ('test1', 3, 'Excellent', 'Very nostalgic, loved to play it.'), "
+    "       ('test1', 5, 'Poor', 'Not really into mystery novels.'), "
+    "       ('test2', 1, 'Excellent', 'Great for music during exercise.'), "
+    "       ('test3', 4, 'Good', 'Suspenseful and catchy')"
 )
 
 
@@ -501,13 +504,8 @@ def login(login_event, data):
         except mysql.connector.Error as err:
             window['-login_status-'].update("Failed to login: {}".format(err), visible=True)
 
+
 def login_success(userName, firstName, lastName):
-    global current_user
-    current_user = {
-        'username': userName,
-        'fname': firstName,
-        'lname': lastName
-    } 
     window['-login_status_text-'].update("Currently logged in as", visible=True)
     window['-current_user-'].update(userName, visible=True)
     window['-login_status-'].update("Successfully logged in. Welcome back, {} {}!".format(firstName, lastName),
