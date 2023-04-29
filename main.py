@@ -50,6 +50,17 @@ TABLES['review'] = (
     ") ENGINE=InnoDB"
 )
 
+TABLES['favorite_seller'] = (
+    "CREATE TABLE IF NOT EXISTS `favorite_seller` ("
+    "   `id` INT NOT NULL AUTO_INCREMENT,"
+    "   `f_username` varchar(32) NOT NULL,"
+    "   `fav_user` varchar(32) NOT NULL,"
+    "   FOREIGN KEY(`f_username`) REFERENCES `user`(`username`),"
+    "   FOREIGN KEY(`fav_user`) REFERENCES `user`(`username`),"
+    "   PRIMARY KEY (`id`)"
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+)
+
 DEFAULT_ROWS['user'] = (
     "INSERT INTO user "
     "(username, password, firstName, lastName, email) "
@@ -85,7 +96,15 @@ DEFAULT_ROWS['review'] = (
     "       ('test3', 4, 'Good', 'Suspenseful and catchy')"
 )
 
-
+DEFAULT_ROWS['favorite_seller'] = (
+    "INSERT INTO favorite_seller "
+    "(f_username, fav_user) "
+    "VALUES ('test1', 'test2'), "
+    "       ('test2', 'test3'), "
+    "       ('test3', 'test1'), "
+    "       ('test4', 'test5'), "
+    "       ('test5', 'test2')  "
+)
 # Read from server.ini
 config = configparser.ConfigParser()
 config.read('server.ini')
@@ -221,6 +240,15 @@ def search(search_event, data):
     else:
         window['-TABLE-'].update(data, visible=False)
 
+def display_queries():
+
+   # cursor.execute(" SELECT distinct user.username FROM user  LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
+    cursor.execute("SELECT distinct u.username FROM user u LEFT JOIN item i ON i.insert_user = u.username LEFT JOIN ( SELECT item_id, COUNT(*) AS num_excellent  FROM review WHERE rating_review = 'Excellent'  GROUP BY item_id HAVING num_excellent >= 3) e ON e.item_id = i.id WHERE e.num_excellent IS NULL")
+    result5 = cursor.fetchall()
+    window['-queries_result5-'].update(result5, visible=True)
+   # cursor.execute("SELECT  u.username  FROM user u LEFT JOIN review r ON u.username = r.insert_user WHERE  NOT EXISTS (select review.rating_review from review where review.rating_review ='Poor' ) ")
+    result6 = cursor.fetchall()
+    window['-queries_result6-'].update(result6, visible=True)
 
 # Insert user inputted data into new row within table 'user'
 def register(register_event, data):
@@ -272,8 +300,9 @@ def display_home_page(values):
     window[f'-SEARCH-'].update(visible=False)
     window[f'-DISPLAY_REVIEWS-'].update(visible=False)
     window[f'-REVIEW-'].update(visible=False)
-
-
+    window['B_QUERIES'].update(visible=True)
+    window['B_QUERY_CANCEL'].update(visible=False)
+    window[f'-DISPLAY_QUERIES-'].update(visible=False)
 # Display Login page
 def display_login_page():
     window['B_LOGIN'].update(visible=True)
@@ -284,7 +313,7 @@ def display_login_page():
     window[f'-REGISTER-'].update(visible=False)
     window[f'-ADD_ITEM-'].update(visible=False)
     window[f'-SEARCH-'].update(visible=False)
-
+    window['B_QUERIES'].update(visible=False)
 
 # Display Registration page
 def display_register_page():
@@ -296,7 +325,7 @@ def display_register_page():
     window[f'-REGISTER-'].update(visible=True)
     window[f'-ADD_ITEM-'].update(visible=False)
     window[f'-SEARCH-'].update(visible=False)
-
+    window['B_QUERIES'].update(visible=False)
 
 def display_review_page():
     
@@ -315,7 +344,15 @@ def search_button():
     window['B_LOGIN_HOME'].update(visible=True)
     window['TABLE'].update(visible=False)
 
-
+def display_queries_page():
+    window[f'-DISPLAY_QUERIES-'].update(visible=True)
+    window[f'-INITIALIZE-'].update(visible=False)
+    window[f'-LOGIN-'].update(visible=False)
+    window[f'-REGISTER-'].update(visible=False)
+    window[f'-SEARCH-'].update(visible=False)
+    window[f'B_INIT_REVIEW'].update(visible=False)
+    window[f'-TABLE-'].update(visible=False)
+    window['B_QUERY_CANCEL'].update(visible=True)
 # Display Add Item page
 def display_item_add_page():
     window['B_ADD_ITEM'].update(visible=True)
@@ -389,6 +426,7 @@ def display_show_reviews_page():
     window['-items_dropdown_reviews-'].update(values=item_titles)
     window['-INITIALIZE-'].update(visible=False)
     window['-DISPLAY_REVIEWS-'].update(visible=True)
+
 
 
 # Validate inputs
@@ -583,6 +621,7 @@ layout_initialize = [
     [sg.Button(button_text='Add Item', visible=False, key='B_INIT_ADD_ITEM')],
     [sg.Button(button_text='Show Reviews', visible=False, key='B_INIT_SHOW_REVIEWS')],
     [sg.Button(button_text='Search', visible=False, key='B_SEARCH')],
+    [sg.Button(button_text='Queries', visible=True, key='B_QUERIES')],
     [sg.Text('', key='-status-', visible=False)]
 ]
 
@@ -645,6 +684,14 @@ layout_display_reviews = [
     [sg.Multiline(size=(60, 15), key="-reviews_display-", disabled=True, visible=False)],
 ]
 
+layout_display_queries = [
+    [sg.Text("Query Results")],
+    [sg.Text("Users who never posted an excellent item ", key="-query5-", visible=True)],
+    [sg.Text("  ", key="-queries_result5-", visible=True)],
+    [sg.Text("  ", key="-queries_result6-", visible=True)],
+    [sg.Button('Home', key="B_QUERY_CANCEL")],
+]
+
 layout = [
     [
         sg.Column(layout_initialize, key='-INITIALIZE-'),
@@ -653,7 +700,8 @@ layout = [
         sg.Column(layout_item_add, visible=False, key='-ADD_ITEM-'),
         sg.Column(layout_search, visible=False, key='-SEARCH-'),
         sg.Column(layout_review, visible=False, key="-REVIEW-"),
-        sg.Column(layout_display_reviews, visible=False, key="-DISPLAY_REVIEWS-")
+        sg.Column(layout_display_reviews, visible=False, key="-DISPLAY_REVIEWS-"),
+        sg.Column(layout_display_queries, visible= False, key="-DISPLAY_QUERIES-")
     ]
 ]
 
@@ -700,6 +748,9 @@ while True:
             display_show_reviews_page()
         elif event == 'B_SHOW_REVIEWS':  # User selects an item and clicks 'Show Reviews'
             display_reviews(values['-items_dropdown_reviews-'])
+        elif event == 'B_QUERIES':
+            display_queries_page()
+            display_queries()
         else:  # Default home page
             display_home_page(values)
 
