@@ -242,13 +242,18 @@ def search(search_event, data):
 
 def display_queries():
 
-   # cursor.execute(" SELECT distinct user.username FROM user  LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
-    cursor.execute("SELECT distinct u.username FROM user u LEFT JOIN item i ON i.insert_user = u.username LEFT JOIN ( SELECT item_id, COUNT(*) AS num_excellent  FROM review WHERE rating_review = 'Excellent'  GROUP BY item_id HAVING num_excellent >= 3) e ON e.item_id = i.id WHERE e.num_excellent IS NULL")
-    result5 = cursor.fetchall()
-    window['-queries_result5-'].update(result5, visible=True)
-   # cursor.execute("SELECT  u.username  FROM user u LEFT JOIN review r ON u.username = r.insert_user WHERE  NOT EXISTS (select review.rating_review from review where review.rating_review ='Poor' ) ")
+    cursor.execute(" SELECT distinct user.username FROM user  LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
     result6 = cursor.fetchall()
-    window['-queries_result6-'].update(result6, visible=True)
+    new_string6 = []
+    for i in result6:
+        new_string6.append(i[0])
+    window['-queries_result6-'].update(new_string6, visible=True)
+    cursor.execute("SELECT DISTINCT r.insert_user FROM review r WHERE NOT EXISTS (SELECT * FROM review WHERE insert_user=r.insert_user AND rating_review='Poor')")
+    result7 = cursor.fetchall()
+    new_string7 = []
+    for i in result7:
+        new_string7.append(i[0])
+    window['-queries_result7-'].update(new_string7, visible=True)
 
 # Insert user inputted data into new row within table 'user'
 def register(register_event, data):
@@ -686,9 +691,10 @@ layout_display_reviews = [
 
 layout_display_queries = [
     [sg.Text("Query Results")],
-    [sg.Text("Users who never posted an excellent item ", key="-query5-", visible=True)],
-    [sg.Text("  ", key="-queries_result5-", visible=True)],
+    [sg.Text("Users who never posted an excellent item ", key="-query6-", visible=True)],
     [sg.Text("  ", key="-queries_result6-", visible=True)],
+    [sg.Text("Users who never posted a Poor review ", key="-query7-", visible=True)],
+    [sg.Text("  ", key="-queries_result7-", visible=True)],
     [sg.Button('Home', key="B_QUERY_CANCEL")],
 ]
 
