@@ -242,18 +242,107 @@ def search(search_event, data):
 
 def display_queries():
 
+    query = '''SELECT insert_user, COUNT(*) as num_items
+    FROM item
+    WHERE insert_date >= '2020-05-01'
+    GROUP BY insert_user
+    HAVING COUNT(*) >= (
+        SELECT COUNT(*) as num_items
+        FROM item
+        WHERE insert_date >= '2020-05-01'
+        GROUP BY insert_user
+        ORDER BY num_items DESC
+        LIMIT 1
+)'''
+    cursor.execute(query)
+    result4 = cursor.fetchall()
+    new_string4 = []
+    for row in result4:
+        new_string4.append(row[0])
+    if len(new_string4) == 0:
+        new_string4 = "No results found!"
+    window['-queries_result4-'].update(new_string4, visible=True)
+    
     cursor.execute(" SELECT distinct user.username FROM user  LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
     result6 = cursor.fetchall()
     new_string6 = []
     for i in result6:
         new_string6.append(i[0])
+    if len(new_string6) == 0:
+        new_string6 = "No results found!"
     window['-queries_result6-'].update(new_string6, visible=True)
+    
     cursor.execute("SELECT DISTINCT r.insert_user FROM review r WHERE NOT EXISTS (SELECT * FROM review WHERE insert_user=r.insert_user AND rating_review='Poor')")
     result7 = cursor.fetchall()
     new_string7 = []
     for i in result7:
         new_string7.append(i[0])
+    if len(new_string7) == 0:
+        new_string7 = "No results found!"
     window['-queries_result7-'].update(new_string7, visible=True)
+    
+    query = '''SELECT DISTINCT u.username 
+    FROM user u 
+    JOIN review r ON u.username = r.insert_user 
+    WHERE r.rating_review = 'Poor' 
+    AND NOT EXISTS (
+        SELECT 1 
+        FROM review r2 
+        WHERE r2.insert_user = u.username 
+        AND r2.rating_review != 'Poor'
+    )'''
+    cursor.execute(query)
+    result8 = cursor.fetchall()
+    new_string8 = []
+    for row in result8:
+        new_string8.append(row[0])
+    if len(new_string8) == 0:
+        new_string8 = "No results found!"
+    window['-queries_result8-'].update(new_string8, visible=True)
+    
+    query = '''SELECT DISTINCT u.username, u.firstName, u.lastName
+            FROM user u
+            INNER JOIN item i ON u.username = i.insert_user
+            LEFT JOIN (
+                SELECT item_id
+                FROM review
+                WHERE rating_review = 'Poor'
+            ) r ON i.id = r.item_id
+            WHERE r.item_id IS NULL
+            OR i.id NOT IN (
+                SELECT item_id
+                FROM review
+            )'''
+    cursor.execute(query)
+    result9 = cursor.fetchall()
+    new_string9 = []
+    for row in result9:
+        new_string9.append(row[0])
+    if len(new_string9) == 0:
+        new_string9 = "No results found!"
+    window['-queries_result9-'].update(new_string9, visible=True)
+    
+    query = '''SELECT DISTINCT r1.insert_user as user_a, r2.insert_user as user_b
+                FROM review r1
+                JOIN review r2 ON r1.item_id = r2.item_id AND r1.insert_user <> r2.insert_user
+                WHERE r1.rating_review = 'excellent' AND r2.rating_review = 'excellent'
+                AND NOT EXISTS (
+                  SELECT *
+                  FROM review r3
+                  WHERE r3.item_id = r1.item_id
+                  AND ((r3.insert_user = r1.insert_user AND r3.rating_review != 'excellent')
+                       OR (r3.insert_user = r2.insert_user AND r3.rating_review != 'excellent'))
+                )'''
+                
+    cursor.execute(query)
+    result10 = cursor.fetchall()
+    new_string10 = []
+    for row in result10:
+        new_string10.append(row[0])
+    if len(new_string10) == 0:
+        new_string10 = "No results found!"
+    window['-queries_result10-'].update(new_string10, visible=True)
+    
 
 # Insert user inputted data into new row within table 'user'
 def register(register_event, data):
@@ -688,13 +777,21 @@ layout_display_reviews = [
     [sg.Text("", key="-reviews_status-", visible=False)],
     [sg.Multiline(size=(60, 15), key="-reviews_display-", disabled=True, visible=False)],
 ]
-
+    
 layout_display_queries = [
     [sg.Text("Query Results")],
+    [sg.Text("Users who posted most number of items ", key="-query4-", visible=True)],
+    [sg.Text("  ", key="-queries_result4-", visible=True)],    
     [sg.Text("Users who never posted an excellent item ", key="-query6-", visible=True)],
     [sg.Text("  ", key="-queries_result6-", visible=True)],
-    [sg.Text("Users who never posted a Poor review ", key="-query7-", visible=True)],
+    [sg.Text("Users who never posted poor review", key="-query7-", visible=True)],
     [sg.Text("  ", key="-queries_result7-", visible=True)],
+    [sg.Text("Users who posted review but each of them is poor", key="-query8-", visible=True)],
+    [sg.Text("  ", key="-queries_result8-", visible=True)],
+    [sg.Text("Users who never get a Poor review ", key="-query9-", visible=True)],
+    [sg.Text("  ", key="-queries_result9-", visible=True)],
+    [sg.Text("User pairs who always give each other excellent review ", key="-query10-", visible=True)],
+    [sg.Text("  ", key="-queries_result10-", visible=True)],
     [sg.Button('Home', key="B_QUERY_CANCEL")],
 ]
 
