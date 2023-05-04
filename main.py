@@ -22,6 +22,15 @@ TABLES['user'] = (
     "  ) ENGINE = InnoDB DEFAULT CHARSET=utf8mb4"
 )
 
+TABLES['category'] = (
+    "CREATE TABLE IF NOT EXISTS `category` ("
+    "   `id` INT NOT NULL AUTO_INCREMENT,"
+    "   `name` varchar(32) NOT NULL,"
+    "   PRIMARY KEY (`id`),"
+    "   UNIQUE INDEX `category_name_UNIQUE` (`name`)"
+    "   ) ENGINE= InnoDB DEFAULT CHARSET=utf8mb4"
+)
+
 TABLES['item'] = (
     "CREATE TABLE IF NOT EXISTS `item` ("
     "   `id` INT NOT NULL AUTO_INCREMENT,"
@@ -36,6 +45,17 @@ TABLES['item'] = (
     "   UNIQUE KEY `item_id_UNIQUE` (`id`)"
     "  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
 )
+
+TABLES['item_category'] = (
+    "CREATE TABLE IF NOT EXISTS `item_category` ("
+	"   `item_id` INT NOT NULL,"
+    "   `category_id` INT NOT NULL,"
+    "   FOREIGN KEY (`item_id`) REFERENCES `item`(`id`),"
+    "   FOREIGN KEY (`category_id`) REFERENCES `category`(`id`),"
+    "   UNIQUE KEY `item_category_id_UNIQUE` (`item_id`, `category_id`)"
+    "  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+)
+
 TABLES['review'] = (
     "CREATE TABLE IF NOT EXISTS `review` ("
     "   `id` INT NOT NULL AUTO_INCREMENT,"
@@ -53,27 +73,26 @@ TABLES['review'] = (
 DEFAULT_ROWS['user'] = (
     "INSERT INTO user "
     "(username, password, firstName, lastName, email) "
-    "VALUES ('test1', 'testpassword1', 'Bob', 'Smith', 'bob.smith@gmail.com'), "
-    "       ('test2', 'testpassword2', 'Amanda', 'Walters', 'amanda.walters@gmail.com'), "
-    "       ('test3', 'testpassword3', 'Denise', 'Belair', 'denise.belair34@yahoo.com'), "
-    "       ('test4', 'testpassword4', 'Richard', 'Spacey', 'richard.spacey@gmail.com'), "
-    "       ('test5', 'testpassword5', 'Curtis', 'Lee', 'curtis.lee@gmail.com')"
+    "VALUES ('test1', 'password', 'Bob', 'Smith', 'bob.smith@gmail.com'), "
+    "       ('test2', 'password', 'Amanda', 'Walters', 'amanda.walters@gmail.com'), "
+    "       ('test3', 'password', 'Denise', 'Belair', 'denise.belair34@yahoo.com'), "
+    "       ('test4', 'password', 'Richard', 'Spacey', 'richard.spacey@gmail.com'), "
+    "       ('test5', 'password', 'Curtis', 'Lee', 'curtis.lee@gmail.com')"
 )
 
 DEFAULT_ROWS['item'] = (
     "INSERT INTO item "
     "(title, description, category, price, insert_user) "
-    "VALUES ('Wireless Earbuds', 'Bluetooth 5.0 Wireless Earbuds', 'Electronics', 70, 'test1'), "
-    "       ('Smart Watch', 'Apple Watch Series 6', 'Electronics', 400, 'test2'), "
-    "       ('Gaming Console', 'Sony PlayStation 5', 'Electronics', 500, 'test3'), "
-    "       ('Crime Fiction Novel', 'Best-selling Crime Fiction Book', 'Books', 15, 'test1'), "
-    "       ('Mystery Novel', 'Suspenseful Mystery Book', 'Books', 18, 'test2'), "
-    "       ('Science Fiction Novel', 'Imaginative Sci-Fi Book', 'Books', 20, 'test3'), "
-    "       ('Sweatshirt', 'Warm Cotton Sweatshirt', 'Clothing', 35, 'test1'), "
-    "       ('Jacket', 'Stylish Winter Jacket', 'Clothing', 90, 'test2'), "
-    "       ('Boots', 'Waterproof Hiking Boots', 'Clothing', 120, 'test3')"
+    "VALUES ('Wireless Earbuds', 'Bluetooth 5.0 Wireless Earbuds', 'electronics', 70, 'test1'), "
+    "       ('Smart Watch', 'Apple Watch Series 6', 'electronics', 400, 'test2'), "
+    "       ('Gaming Console', 'Sony PlayStation 5', 'electronics', 500, 'test3'), "
+    "       ('Crime Fiction Novel', 'Best-selling Crime Fiction Book', 'books', 15, 'test1'), "
+    "       ('Mystery Novel', 'Suspenseful Mystery Book', 'books', 18, 'test2'), "
+    "       ('Science Fiction Novel', 'Imaginative Sci-Fi Book', 'books', 20, 'test3'), "
+    "       ('Sweatshirt', 'Warm Cotton Sweatshirt', 'clothing', 35, 'test1'), "
+    "       ('Jacket', 'Stylish Winter Jacket', 'clothing', 90, 'test2'), "
+    "       ('Boots', 'Waterproof Hiking Boots', 'clothing', 120, 'test3')"
 )
-
 
 DEFAULT_ROWS['review'] = (
     "INSERT INTO review "
@@ -83,6 +102,30 @@ DEFAULT_ROWS['review'] = (
     "       ('test1', 5, 'Poor', 'Not really into mystery novels.'), "
     "       ('test2', 1, 'Excellent', 'Great for music during exercise.'), "
     "       ('test3', 4, 'Good', 'Suspenseful and catchy')"
+)
+
+
+DEFAULT_ROWS['category'] = (
+    "INSERT INTO category "
+    "(name) "
+    "VALUES ('electronics'), "
+    "       ('books'), "
+    "       ('clothing')"
+)
+
+
+DEFAULT_ROWS['item_category'] = (
+    "INSERT INTO item_category "
+    "(item_id, category_id) "
+    "VALUES (1, 1), "
+    "       (2, 1), "
+    "       (3, 1), "
+    "       (4, 2), "
+    "       (5, 2), "
+    "       (6, 2), "
+    "       (7, 3), "
+    "       (8, 3), "
+    "       (9, 3) "
 )
 
 
@@ -172,28 +215,71 @@ def add_item(item_event, data):
                 current_count = 0
                 for (count,) in cursor:
                     current_count = count
+
                 if current_count > 2:
-                    window['-add_item_status-'].update("Unable to submit - daily item add limit reached for this user.",
-                                                       visible=True)
+                    window['-add_item_status-'].update("Unable to submit - daily item add limit reached for this user.", visible=True)
                 else:
                     try:
-                        data_item = (
-                        data['-new_item_title-'], data['-new_item_description-'], data['-new_item_category-'],
-                        data['-new_item_price-'], username)
-                        cursor.execute(
-                            """INSERT INTO item (title, description, category, price, insert_user) VALUES (%s, %s, %s, %s, %s)""",
-                            data_item) 
+                        whitespace_pattern = re.compile(r'\s+')
+                        categories = re.sub(whitespace_pattern, '', data['-new_item_category-']).lower()
+
+                        while (categories.endswith(',')):
+                            categories = categories[:-1]
+
+                        data_item = (data['-new_item_title-'], data['-new_item_description-'], categories, data['-new_item_price-'], username)
+                        cursor.execute("""INSERT INTO item (title, description, category, price, insert_user) VALUES (%s, %s, %s, %s, %s)""", data_item) 
 
                         cnx.commit()
 
-                        item_add_success()
+                        add_categories(categories)
+
                     except mysql.connector.Error as err:
                         window['-add_item_status-'].update("Failed to add current item: {}".format(err), visible=True)
 
             else:
                 window['-add_item_status-'].update("No user is currently logged in.", visible=True)
+
         except mysql.connector.Error as err:
             window['-add_item_status-'].update("Failed to add item: {}".format(err), visible=True)
+
+
+def add_categories(data):
+    categories = data.split(',')
+    are_categories_valid = True
+    for item in categories:
+        if (len(item) > 0):
+            try:
+                cursor.execute("INSERT INTO category (name) VALUES (%s)", (item, ))
+                cnx.commit()
+            except mysql.connector.Error as err:
+                are_categories_valid = False
+                window['-add_item_status-'].update("Failed to add category: {}".format(err), visible=True)
+
+    if (are_categories_valid):
+        add_item_category_pair(categories)
+
+
+def add_item_category_pair(category_names):
+    try:
+        cursor.execute("SELECT MAX(id) as max FROM item")
+        item_id = cursor.fetchone()[0]
+        isValid = True
+        for category in category_names:
+            try:
+                print('category: {}'.format(category))
+                cursor.execute("""SELECT id from category WHERE name=%s""", (category,))
+                category_id = cursor.fetchone()[0]
+                cursor.execute("""INSERT INTO item_category (item_id, category_id) VALUES (%s, %s)""", (item_id, category_id))
+                cnx.commit()
+            except mysql.connector.Error as err:
+                isValid = False
+                window['-add_item_status-'].update("Failed to add item-category pair: {}".format(err), visible=True)
+
+        if (isValid):
+            item_add_success()
+
+    except mysql.connector.Error as err:
+        window['-add_item_status-'].update("Failed to search for item ID: {}".format(err), visible=True)
 
 
 def search(search_event, data):
@@ -220,6 +306,13 @@ def search(search_event, data):
         
     else:
         window['-TABLE-'].update(data, visible=False)
+
+
+def list_items():
+    cursor.execute("SELECT * FROM item i1 WHERE price = (SELECT max(i2.price) FROM item i2 WHERE i1.category = i2.category) ORDER BY category")
+    result = cursor.fetchall()
+    for row in result:
+        print(row)
 
 
 # Insert user inputted data into new row within table 'user'
@@ -264,6 +357,7 @@ def display_home_page(values):
     window['-add_item_status-'].update('', visible=False)
     window['-login_status-'].update('', visible=False)
     window['-registration_status-'].update('', visible=False)
+    window['-review_status-'].update(visible=False)
     window['-status-'].update('', visible=False)
     window[f'-INITIALIZE-'].update(visible=True)
     window[f'-LOGIN-'].update(visible=False)
@@ -272,6 +366,13 @@ def display_home_page(values):
     window[f'-SEARCH-'].update(visible=False)
     window[f'-DISPLAY_REVIEWS-'].update(visible=False)
     window[f'-REVIEW-'].update(visible=False)
+    window[f'-DISPLAY_LISTS-'].update(visible=False)
+
+
+def display_lists_page():
+    window[f'-DISPLAY_LISTS-'].update(visible=True)
+    window[f'-INITIALIZE-'].update(visible=False)
+    list_items()
 
 
 # Display Login page
@@ -281,9 +382,6 @@ def display_login_page():
     window['B_LOGIN_HOME'].update(visible=False)
     window[f'-INITIALIZE-'].update(visible=False)
     window[f'-LOGIN-'].update(visible=True)
-    window[f'-REGISTER-'].update(visible=False)
-    window[f'-ADD_ITEM-'].update(visible=False)
-    window[f'-SEARCH-'].update(visible=False)
 
 
 # Display Registration page
@@ -292,21 +390,20 @@ def display_register_page():
     window['B_REGISTER_CANCEL'].update(visible=True)
     window['B_REGISTER_HOME'].update(visible=False)
     window[f'-INITIALIZE-'].update(visible=False)
-    window[f'-LOGIN-'].update(visible=False)
     window[f'-REGISTER-'].update(visible=True)
-    window[f'-ADD_ITEM-'].update(visible=False)
-    window[f'-SEARCH-'].update(visible=False)
 
 
 def display_review_page():
-    
     window['-INITIALIZE-'].update(visible=False)
-    window['-REGISTER-'].update(visible=False)
-    window['-LOGIN-'].update(visible=False)
-    window['-ADD_ITEM-'].update(visible=False)
-    window['-SEARCH-'].update(visible=False)
     window['-REVIEW-'].update(visible=True)
     window['B_REVIEW_CANCEL'].update(visible=True)
+
+
+def display_search_page():
+    window[f'-INITIALIZE-'].update(visible=False)
+    window[f'-SEARCH-'].update(visible=True)
+    window[f'B_INIT_REVIEW'].update(visible=False)
+    window[f'-TABLE-'].update(visible=False)
 
 
 def search_button():
@@ -322,8 +419,6 @@ def display_item_add_page():
     window['B_ADD_ITEM_CANCEL'].update(visible=True)
     window['B_ADD_ITEM_HOME'].update(visible=False)
     window[f'-INITIALIZE-'].update(visible=False)
-    window[f'-LOGIN-'].update(visible=False)
-    window[f'-REGISTER-'].update(visible=False)
     window[f'-ADD_ITEM-'].update(visible=True)
     window[f'-SEARCH-'].update(visible=False)
 
@@ -512,6 +607,7 @@ def login_success(userName, firstName, lastName):
                                     visible=True)
     window['B_INIT_ADD_ITEM'].update(visible=True)
     window['B_INIT_SHOW_REVIEWS'].update(visible=True)
+    window['B_LISTS'].update(visible=True)
     window['B_LOGIN'].update(visible=False)
     window['B_LOGIN_CANCEL'].update(visible=False)
     window['B_LOGIN_HOME'].update(visible=True)
@@ -583,6 +679,7 @@ layout_initialize = [
     [sg.Button(button_text='Add Item', visible=False, key='B_INIT_ADD_ITEM')],
     [sg.Button(button_text='Show Reviews', visible=False, key='B_INIT_SHOW_REVIEWS')],
     [sg.Button(button_text='Search', visible=False, key='B_SEARCH')],
+    [sg.Button(button_text='Lists', visible=False, key='B_LISTS')],
     [sg.Text('', key='-status-', visible=False)]
 ]
 
@@ -639,10 +736,14 @@ layout_review = [
 
 layout_display_reviews = [
     [sg.Text("Select Item"), sg.Combo(["******************"], key="-items_dropdown_reviews-", readonly=True)],
-    [sg.Button("Show Reviews", key="B_SHOW_REVIEWS"), sg.Button("Home", key="B_SHOW_REVIEWS_CANCEL"),
-     sg.Button("Home", key="B_SHOW_REVIEWS_HOME", visible=False)],
+    [sg.Button("Show Reviews", key="B_SHOW_REVIEWS"), sg.Button("Home", key="B_SHOW_REVIEWS_CANCEL"), sg.Button("Home", key="B_SHOW_REVIEWS_HOME", visible=False)],
     [sg.Text("", key="-reviews_status-", visible=False)],
     [sg.Multiline(size=(60, 15), key="-reviews_display-", disabled=True, visible=False)],
+]
+
+layout_display_lists = [
+    [sg.Text(key='-lists-')],
+    [sg.Button("Back")]
 ]
 
 layout = [
@@ -653,7 +754,8 @@ layout = [
         sg.Column(layout_item_add, visible=False, key='-ADD_ITEM-'),
         sg.Column(layout_search, visible=False, key='-SEARCH-'),
         sg.Column(layout_review, visible=False, key="-REVIEW-"),
-        sg.Column(layout_display_reviews, visible=False, key="-DISPLAY_REVIEWS-")
+        sg.Column(layout_display_reviews, visible=False, key="-DISPLAY_REVIEWS-"),
+        sg.Column(layout_display_lists, visible=False, key="-DISPLAY_LISTS-")
     ]
 ]
 
@@ -682,13 +784,10 @@ while True:
             add_item(event, values)
         elif event == 'B_INIT_DB':  # User clicks 'Initialize Database' button
             init_database()
-        elif event == 'B_SEARCH':  # User enters text to search
-            window[f'-INITIALIZE-'].update(visible=False)
-            window[f'-LOGIN-'].update(visible=False)
-            window[f'-REGISTER-'].update(visible=False)
-            window[f'-SEARCH-'].update(visible=True)
-            window[f'B_INIT_REVIEW'].update(visible=False)
-            window[f'-TABLE-'].update(visible=False)
+        elif event == 'B_LISTS':    # User clicks 'Lists' button
+            display_lists_page()
+        elif event == 'B_SEARCH':   # User enters text to search
+            display_search_page()
         elif event == 'B_SEARCH_2':
             search(event, values)
         elif event == 'B_INIT_REVIEW':  # User clicks 'Write a Review' button
