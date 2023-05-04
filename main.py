@@ -241,19 +241,49 @@ def search(search_event, data):
         window['-TABLE-'].update(data, visible=False)
 
 def display_queries():
+    cursor.execute("Select distinct username from user")
+    result_for_user = cursor.fetchall()
+    window['-fusers_dropdown-'].update(values=result_for_user)
+    window['-susers_dropdown-'].update(values=result_for_user)
+    user_1 = values["-fusers_dropdown-"]
+    user_2 = values["-susers_dropdown-"]
+
+    new_user_1 = None
+    new_user_2 = None
+    for i in user_1:
+      new_user_1 = i
+    for j in user_2:
+      new_user_2 = j
+    if new_user_1 and new_user_2 :
+            cursor.execute(""" SELECT fav_user FROM favorite_seller WHERE f_username = %s AND fav_user IN (SELECT fav_user FROM favorite_seller WHERE f_username = %s )""", (new_user_1,new_user_2))
+            result5 = cursor.fetchall()
+            new_string5 = []
+            for i in result5:
+                new_string5.append(i[0])
+            if len(new_string5) == 0:
+                new_string5 = "No results found!"
+            window['-queries_result5-'].update(new_string5, visible=True)
+
+
 
     cursor.execute(" SELECT distinct user.username FROM user  LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
     result6 = cursor.fetchall()
     new_string6 = []
     for i in result6:
         new_string6.append(i[0])
+    if len(new_string6) == 0:
+        new_string6 = "No results found!"
     window['-queries_result6-'].update(new_string6, visible=True)
     cursor.execute("SELECT DISTINCT r.insert_user FROM review r WHERE NOT EXISTS (SELECT * FROM review WHERE insert_user=r.insert_user AND rating_review='Poor')")
     result7 = cursor.fetchall()
     new_string7 = []
     for i in result7:
         new_string7.append(i[0])
+    if len(new_string7) == 0:
+        new_string7 = "No results found!"
     window['-queries_result7-'].update(new_string7, visible=True)
+
+
 
 # Insert user inputted data into new row within table 'user'
 def register(register_event, data):
@@ -358,6 +388,8 @@ def display_queries_page():
     window[f'B_INIT_REVIEW'].update(visible=False)
     window[f'-TABLE-'].update(visible=False)
     window['B_QUERY_CANCEL'].update(visible=True)
+
+
 # Display Add Item page
 def display_item_add_page():
     window['B_ADD_ITEM'].update(visible=True)
@@ -572,12 +604,12 @@ def submit_review(item_event, data):
             selected_item_id = next((item[0] for item in items if item[1] == selected_item_title), None)
             rating = values["-rating_dropdown-"]
             review_description = values["-review_description-"]
-            
             # Check the review_description is within 64 character
             if(len(review_description)>64):
                 window["-review_status-"].update("Description cannot have more than 64 characters!", visible=True)
                 window.refresh()
             else:
+
                 cursor.execute("""SELECT insert_user FROM item WHERE id = %s""", (selected_item_id,))
                 item_owner_id = cursor.fetchone()
                 if item_owner_id and item_owner_id[0] == username:
@@ -599,7 +631,20 @@ def submit_review(item_event, data):
                         window["-review_status-"].update("You have reached the maximum limit of 3 reviews per day.", visible=True)
                         window.refresh()
                     else:
+                        fav_seller = values["-favorite_seller-"]
+                        if fav_seller:
+                            insert_user = cursor.execute("""SELECT insert_user FROM item WHERE id = %s""",
+                                                         (selected_item_id,))
+                            insert_user = cursor.fetchone()[0]
+                            try:
+                              cursor.execute(""" INSERT INTO favorite_seller (f_username, fav_user) VALUES (%s, %s) """,
+                                       (username, insert_user))
+                              cnx.commit()
+                            except mysql.connector.Error as err:
+                                window["-review_status-"].update(f" Failed to add favorite seller: {err}", visible=True)
+
                         try:
+
                             cursor.execute(
                                 """INSERT INTO review (insert_user, item_id, rating_review, review_description, insert_date) VALUES (%s, %s, %s, %s, NOW())""",
                                 (username, selected_item_id, rating, review_description))
@@ -655,6 +700,7 @@ layout_search = [
     [sg.Text("Select Item"), sg.Combo(["******************"], key="-items_dropdown-", readonly=True)],
     [sg.Text("Rating"), sg.Combo(["Excellent", "Good", "Fair", "Poor"], key="-rating_dropdown-", readonly=True)],
     [sg.Text("Description"), sg.InputText(key="-review_description-")],
+    [sg.Checkbox("Mark Seller as Favorite", key="-favorite_seller-", )],
     [sg.Button("Submit", key="B_REVIEW_SUBMIT"), sg.Button("Home", key="B_REVIEW_CANCEL")],
     [sg.Text("", key="-review_status-", visible=False)]
 ]
@@ -690,7 +736,13 @@ layout_display_reviews = [
 ]
 
 layout_display_queries = [
+
     [sg.Text("Query Results")],
+    [sg.Text("Users who are favorited by both users", key="-for_query5-", visible=True)],
+    [sg.Text("Select First User"), sg.Combo(["******************"], key="-fusers_dropdown-", readonly=True)],
+    [sg.Text("Select Second User"), sg.Combo(["******************"], key="-susers_dropdown-", readonly=True)],
+    [sg.Button('Submit', key="-query5-")],
+    [sg.Text("Query 5  ", key="-queries_result5-", visible=True)],
     [sg.Text("Users who never posted an excellent item ", key="-query6-", visible=True)],
     [sg.Text("  ", key="-queries_result6-", visible=True)],
     [sg.Text("Users who never posted a Poor review ", key="-query7-", visible=True)],
@@ -757,6 +809,10 @@ while True:
         elif event == 'B_QUERIES':
             display_queries_page()
             display_queries()
+        elif event == '-query5-':
+            #display_queries_page()
+            display_queries()
+            #window.refresh()
         else:  # Default home page
             display_home_page(values)
 
