@@ -39,7 +39,7 @@ TABLES['item'] = (
     "   `category` varchar(255) NOT NULL,"
     "   `price` DECIMAL(16,2) NOT NULL,"
     "   `insert_user` varchar(32) NOT NULL,"
-    "   `insert_date` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," 
+    "   `insert_date` DATE NOT NULL DEFAULT (CURDATE())," 
     "   PRIMARY KEY (`id`),"
     "   FOREIGN KEY(`insert_user`) REFERENCES `user`(`username`),"
     "   UNIQUE KEY `item_id_UNIQUE` (`id`)"
@@ -50,6 +50,7 @@ TABLES['item_category'] = (
     "CREATE TABLE IF NOT EXISTS `item_category` ("
 	"   `item_id` INT NOT NULL,"
     "   `category_id` INT NOT NULL,"
+    "   `insert_date` DATE NOT NULL DEFAULT (CURDATE()),"
     "   FOREIGN KEY (`item_id`) REFERENCES `item`(`id`),"
     "   FOREIGN KEY (`category_id`) REFERENCES `category`(`id`),"
     "   UNIQUE KEY `item_category_id_UNIQUE` (`item_id`, `category_id`)"
@@ -329,7 +330,85 @@ def search(search_event, data):
     else:
         window['-TABLE-'].update(data, visible=False)
 
+
+def search_users(search_event, data):
+    window['-query2-'].update(visible=True)
+    cursor.execute("""SELECT insert_user FROM 
+        (SELECT DISTINCT a.id, a.title, a.insert_user, a.insert_date FROM item a 
+        INNER JOIN item_category b ON a.id = b.item_id 
+        INNER JOIN category c on b.category_id = c.id
+        WHERE c.name = %s OR c.name = %s) AS full_item
+        GROUP BY insert_user HAVING COUNT(*) > 1""", (data['-input_category_1-'], data['-input_category_2-']))
+    result = cursor.fetchall()
+    users = []
+    for (insert_user,) in result:
+        users.append(insert_user)
+    print(len(users))
+    if (len(users) == 0):
+        users = "No users satisfy query."
+
+    window['-queries_result2-'].update(users, visible=True)
+
+
+def get_users():
+    try:
+        cursor.execute("SELECT username FROM user")
+        result = cursor.fetchall()
+        users = []
+        for (user,) in result:
+            users.append(user)
+        window['-users_dropdown-'].update(values=users)
+    except mysql.connector.Error as err:
+        window['-queries_error-'].update("Failed to get users: {}".format(err), visible=True)
+
+
+def search_good_items(search_event, data):
+    try:
+        cursor.execute("""SELECT DISTINCT i.title
+            FROM review r LEFT JOIN item i ON r.item_id=i.id
+            WHERE i.insert_user=%s AND NOT EXISTS(
+            SELECT item_id, rating_review FROM review WHERE item_id=r.item_id AND rating_review IN ('Poor', 'Fair')
+        )""", (data['-users_dropdown-'],))
+        window['-queries_error-'].update(visible=False)
+        result = cursor.fetchall()
+        good_items = []
+        for (title,) in result:
+            good_items.append(title)
+        if (len(good_items) == 0):
+            good_items = 'No good+ items added by user {}.'.format(data['-users_dropdown-'])
+        window['-queries_result3-'].update(good_items, visible=True)
+    except mysql.connector.Error as err:
+        window['-queries_error-'].update("Failed to get good+ items: {}".format(err), visible=False)
+
+
 def display_queries():
+    window['-queries_error-'].update(visible=False)
+    window['-query2-'].update(visible=False)
+    window['-query3-'].update(visible=False)
+    window['-queries_result2-'].update(visible=False)
+    window['-queries_result3-'].update(visible=False)
+
+    # Most expensive items in each category
+    query = """SELECT t1.* FROM (
+	    SELECT d.name, b.title, b.price
+	    FROM item b
+	    INNER JOIN item_category c ON b.id = c.item_id
+	    INNER JOIN category d ON c.category_id = d.id
+    ) AS t1 INNER JOIN (
+        SELECT name, max(price) as max_price from (
+            SELECT x.title, x.price, z.name
+            FROM item x
+            INNER JOIN item_category y ON x.id = y.item_id
+            INNER JOIN category z ON y.category_id = z.id
+        ) as full_items GROUP BY name
+    ) t2 ON t1.name=t2.name AND t1.price = t2.max_price"""
+    cursor.execute(query)
+    result_most_expensive_items = cursor.fetchall()
+    table = tabulate(result_most_expensive_items, headers=["Category", "Item", "Price"])
+    window['-most_expensive_items_table-'].update(table, visible=True)
+
+    # Good+ Items posted by selected user
+    get_users()
 
     query = '''SELECT insert_user, COUNT(*) as num_items
     FROM item
@@ -352,7 +431,7 @@ def display_queries():
         new_string4 = "No results found!"
     window['-queries_result4-'].update(new_string4, visible=True)
     
-    cursor.execute(" SELECT distinct user.username FROM user  LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
+    cursor.execute(" SELECT distinct user.username FROM user LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
     result6 = cursor.fetchall()
     new_string6 = []
     for i in result6:
@@ -431,13 +510,6 @@ def display_queries():
     if len(new_string10) == 0:
         new_string10 = "No results found!"
     window['-queries_result10-'].update(new_string10, visible=True)
-    
-
-def list_items():
-    cursor.execute("SELECT * FROM item i1 WHERE price = (SELECT max(i2.price) FROM item i2 WHERE i1.category = i2.category) ORDER BY category")
-    result = cursor.fetchall()
-    for row in result:
-        print(row)
 
 
 # Insert user inputted data into new row within table 'user'
@@ -612,7 +684,6 @@ def display_show_reviews_page():
     window['-DISPLAY_REVIEWS-'].update(visible=True)
 
 
-
 # Validate inputs
 def validate_inputs(event, data):
     if event == 'B_ADD_ITEM':
@@ -734,7 +805,6 @@ def login_success(userName, firstName, lastName):
                                     visible=True)
     window['B_INIT_ADD_ITEM'].update(visible=True)
     window['B_INIT_SHOW_REVIEWS'].update(visible=True)
-    window['B_LISTS'].update(visible=True)
     window['B_LOGIN'].update(visible=False)
     window['B_LOGIN_CANCEL'].update(visible=False)
     window['B_LOGIN_HOME'].update(visible=True)
@@ -846,9 +916,7 @@ layout_register = [
     [sg.Text('First Name'), sg.InputText(size=(32, 1), key='-fname-')],
     [sg.Text('Last Name'), sg.InputText(size=(32, 1), key='-lname-')],
     [sg.Text('E-mail'), sg.InputText(key='-email-')],
-    [sg.Button(button_text='Submit', key='B_REGISTER'), sg.Button('Cancel', key='B_REGISTER_CANCEL'),
-     sg.Button('Home', key='B_REGISTER_HOME', visible=False)],
-  
+    [sg.Button(button_text='Submit', key='B_REGISTER'), sg.Button('Cancel', key='B_REGISTER_CANCEL'), sg.Button('Home', key='B_REGISTER_HOME', visible=False)],
     [sg.Text('', key='-registration_status-', visible=False)]
 ]
 
@@ -870,8 +938,19 @@ layout_display_reviews = [
     
 layout_display_queries = [
     [sg.Text("Query Results")],
+    [sg.Text("Most Expensive Items In Each Category", key='-query1-', visible=True)],
+    [sg.Text(key="-most_expensive_items_table-")],
+    [sg.Text("Category 1"), sg.InputText(size=(32, 1), key='-input_category_1-')],
+    [sg.Text("Category 2"), sg.InputText(size=(32, 1), key='-input_category_2-')],
+    [sg.Button("Search Users", key='B_SEARCH_USERS')],
+    [sg.Text("Users who posted at least two items on the same day", key='-query2-', visible=False)],
+    [sg.Text("  ", key='-queries_result2-', visible=True)],
+    [sg.Text("Good+ Items Posted by Selected User"), sg.Combo(["******************"], key="-users_dropdown-", readonly=True)],
+    [sg.Button("Search Items", key='B_SEARCH_ITEMS')],
+    [sg.Text("Items with 'Good' and 'Excellent' ratings", key='-query3-', visible=False)],
+    [sg.Text("  ", key="-queries_result3-", visible=True)],
     [sg.Text("Users who posted most number of items ", key="-query4-", visible=True)],
-    [sg.Text("  ", key="-queries_result4-", visible=True)],    
+    [sg.Text("  ", key="-queries_result4-", visible=True)],
     [sg.Text("Users who never posted an excellent item ", key="-query6-", visible=True)],
     [sg.Text("  ", key="-queries_result6-", visible=True)],
     [sg.Text("Users who never posted poor review", key="-query7-", visible=True)],
@@ -883,6 +962,7 @@ layout_display_queries = [
     [sg.Text("User pairs who always give each other excellent review ", key="-query10-", visible=True)],
     [sg.Text("  ", key="-queries_result10-", visible=True)],
     [sg.Button('Home', key="B_QUERY_CANCEL")],
+    [sg.Text("", key='-queries_error-', visible=False)]
 ]
 
 layout_display_lists = [
@@ -928,12 +1008,14 @@ while True:
             add_item(event, values)
         elif event == 'B_INIT_DB':  # User clicks 'Initialize Database' button
             init_database()
-        elif event == 'B_LISTS':    # User clicks 'Lists' button
-            display_lists_page()
         elif event == 'B_SEARCH':   # User enters text to search
             display_search_page()
         elif event == 'B_SEARCH_2':
             search(event, values)
+        elif event == 'B_SEARCH_ITEMS': # User clicks button to search for good+ items by selected user
+            search_good_items(event, values)
+        elif event == 'B_SEARCH_USERS': # User clicks button to search for users who submitted items in same day with specified categories
+            search_users(event, values)
         elif event == 'B_INIT_REVIEW':  # User clicks 'Write a Review' button
             display_review_page()
         elif event == 'B_REVIEW_SUBMIT':
