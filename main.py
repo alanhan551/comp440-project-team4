@@ -343,10 +343,10 @@ def search_users(data):
     users = []
     for (insert_user,) in result:
         users.append(insert_user)
-    print(len(users))
     if (len(users) == 0):
         users = "No users satisfy query."
-
+    else:
+        users = ', '.join(users)
     window['-queries_result2-'].update(users, visible=True)
 
 
@@ -376,6 +376,8 @@ def search_good_items(data):
             good_items.append(title)
         if (len(good_items) == 0):
             good_items = 'No good+ items added by user {}.'.format(data['-users_dropdown-'])
+        else:
+            good_items = ', '.join(good_items)
         window['-queries_result3-'].update(good_items, visible=True)
     except mysql.connector.Error as err:
         window['-queries_error-'].update("Failed to get good+ items: {}".format(err), visible=False)
@@ -403,6 +405,7 @@ def search_query_5(data):
             window['-queries_result5-'].update(new_string5, visible=True)
     except mysql.connector.Error as err:
         window['-queries_result5-'].update('Failed to execute query 5: {}'.format(err))
+
 
 # Insert user inputted data into new row within table 'user'
 def register(register_event, data):
@@ -501,8 +504,6 @@ def search_button():
 
 def display_queries_page():
     window['-queries_error-'].update(visible=False)
-    window['-query2-'].update(visible=False)
-    window['-query3-'].update(visible=False)
     window['-queries_result2-'].update(visible=False)
     window['-queries_result3-'].update(visible=False)
 
@@ -521,9 +522,12 @@ def display_queries_page():
         ) as full_items GROUP BY name
     ) t2 ON t1.name=t2.name AND t1.price = t2.max_price"""
     cursor.execute(query)
-    result_most_expensive_items = cursor.fetchall()
-    table = tabulate(result_most_expensive_items, headers=["Category", "Item", "Price"])
-    window['-most_expensive_items_table-'].update(table, visible=True)
+    result = cursor.fetchall()
+    table = []
+    for row in result:
+        table.append(row)
+    # table = tabulate(result_most_expensive_items, headers=["Category", "Item", "Price"])
+    window['-most_expensive_items_table-'].update(values=table, visible=True)
 
     # User List for Query 3
     get_users()
@@ -998,19 +1002,17 @@ layout_display_reviews = [
 ]
     
 layout_display_queries_1 = [
-
-    [sg.Text("Query Results")],
-    [sg.Text("Most Expensive Items In Each Category", key='-query1-', visible=True)],
-    [sg.Text(key="-most_expensive_items_table-")],
+    [sg.Text("1. Query Most Expensive Items In Each Category:", key='-query1-', visible=True)],
+    [sg.Table(values=[], col_widths=[32, 32], expand_x=True, headings=['Category', 'Item'], justification='left', key="-most_expensive_items_table-", num_rows=5, select_mode=None, vertical_scroll_only=False)],
+    [sg.Text("2. Query Users With At Least 2 Items Within Same Day")],
     [sg.Text("Category 1"), sg.InputText(size=(32, 1), key='-input_category_1-')],
     [sg.Text("Category 2"), sg.InputText(size=(32, 1), key='-input_category_2-')],
     [sg.Button("Search Users", key='B_SEARCH_USERS')],
-    [sg.Text("Users who posted at least two items on the same day", key='-query2-', visible=False)],
-    [sg.Text("  ", key='-queries_result2-', visible=True)],
-    [sg.Text("Good+ Items Posted by Selected User"), sg.Combo(["******************"], key="-users_dropdown-", readonly=True)],
+    [sg.Text("Query 2 Results:", key='-query2-'), sg.Text("  ", key='-queries_result2-', visible=True)],
+    [sg.Text("3. Items With 'Good' and 'Excellent' Ratings")],
+    [sg.Text("Select A User:"), sg.Combo(["******************"], key="-users_dropdown-", readonly=True)],
     [sg.Button("Search Items", key='B_SEARCH_ITEMS')],
-    [sg.Text("Items with 'Good' and 'Excellent' ratings", key='-query3-', visible=False)],
-    [sg.Text("  ", key="-queries_result3-", visible=True)],
+    [sg.Text("Query 3 Results:", key='-query3-'), sg.Text("  ", key="-queries_result3-", visible=True)],
     [sg.Button('Home', key="B_QUERY_CANCEL")],
     [sg.Text("", key='-queries_error-', visible=False)]
 ]
