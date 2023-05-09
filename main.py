@@ -358,6 +358,7 @@ def get_users():
         for (user,) in result:
             users.append(user)
         window['-users_dropdown-'].update(values=users)
+        window['-queries_error-'].update(visible=False)
     except mysql.connector.Error as err:
         window['-queries_error-'].update("Failed to get users: {}".format(err), visible=True)
 
@@ -507,30 +508,33 @@ def display_queries_page():
     window['-queries_result2-'].update(visible=False)
     window['-queries_result3-'].update(visible=False)
 
-    # Query 1
-    query = """SELECT t1.* FROM (
-	    SELECT d.name, b.title, b.price
-	    FROM item b
-	    INNER JOIN item_category c ON b.id = c.item_id
-	    INNER JOIN category d ON c.category_id = d.id
-    ) AS t1 INNER JOIN (
-        SELECT name, max(price) as max_price from (
-            SELECT x.title, x.price, z.name
-            FROM item x
-            INNER JOIN item_category y ON x.id = y.item_id
-            INNER JOIN category z ON y.category_id = z.id
-        ) as full_items GROUP BY name
-    ) t2 ON t1.name=t2.name AND t1.price = t2.max_price"""
-    cursor.execute(query)
-    result = cursor.fetchall()
-    table = []
-    for row in result:
-        table.append(row)
-    # table = tabulate(result_most_expensive_items, headers=["Category", "Item", "Price"])
-    window['-most_expensive_items_table-'].update(values=table, visible=True)
+    try:
+        # Query 1
+        query = """SELECT t1.* FROM (
+	        SELECT d.name, b.title, b.price
+	        FROM item b
+	        INNER JOIN item_category c ON b.id = c.item_id
+	        INNER JOIN category d ON c.category_id = d.id
+        ) AS t1 INNER JOIN (
+            SELECT name, max(price) as max_price from (
+                SELECT x.title, x.price, z.name
+                FROM item x
+                INNER JOIN item_category y ON x.id = y.item_id
+                INNER JOIN category z ON y.category_id = z.id
+            ) as full_items GROUP BY name
+        ) t2 ON t1.name=t2.name AND t1.price = t2.max_price"""
+        cursor.execute(query)
+        result = cursor.fetchall()
+        table = []
+        for row in result:
+            table.append(row)
+        # table = tabulate(result_most_expensive_items, headers=["Category", "Item", "Price"])
+        window['-most_expensive_items_table-'].update(values=table, visible=True)
 
-    # User List for Query 3
-    get_users()
+        # User List for Query 3
+        get_users()
+    except mysql.connector.Error as err:
+        window['-queries_error-'].update('Error preparing query page 1: {}'.format(err), visible=True)
 
     window[f'-DISPLAY_QUERIES-'].update(visible=True)
     window[f'-INITIALIZE-'].update(visible=False)
@@ -538,6 +542,9 @@ def display_queries_page():
 
 
 def display_queries_page_2():
+    window['-queries_error_2-'].update(visible=False)
+    window['-queries_result5-'].update(visible=False)
+
     query = '''SELECT insert_user, COUNT(*) as num_items
     FROM item
     WHERE insert_date >= '2020-05-01'
@@ -580,6 +587,7 @@ def display_queries_page_2():
 
 
 def display_queries_page_3():
+    window['-queries_error_3-'].update(visible=False)
     # Query 7
     cursor.execute("SELECT DISTINCT r.insert_user FROM review r WHERE NOT EXISTS (SELECT * FROM review WHERE insert_user=r.insert_user AND rating_review='Poor')")
     result7 = cursor.fetchall()
@@ -1018,28 +1026,30 @@ layout_display_queries_1 = [
 ]
 
 layout_display_queries_2 = [
-    [sg.Text("Users who posted most number of items ", key="-query4-", visible=True)],
+    [sg.Text("4. Users who posted most number of items ", key="-query4-", visible=True)],
     [sg.Text("  ", key="-queries_result4-", visible=True)],
-    [sg.Text("Users who are favorited by both users", key="-for_query5-", visible=True)],
+    [sg.Text("5. Users who are favorited by both users", key="-for_query5-", visible=True)],
     [sg.Text("Select First User"), sg.Combo(["******************"], key="-fusers_dropdown-", readonly=True)],
     [sg.Text("Select Second User"), sg.Combo(["******************"], key="-susers_dropdown-", readonly=True)],
     [sg.Button('Submit', key="B_SEARCH_QUERY_5")],
     [sg.Text("Query 5  ", key="-queries_result5-", visible=True)],
-    [sg.Text("Users who never posted an excellent item ", key="-query6-", visible=True)],
+    [sg.Text("6. Users who never posted an excellent item ", key="-query6-", visible=True)],
     [sg.Text("  ", key="-queries_result6-", visible=True)],
-    [sg.Button('Home', key="B_QUERY_CANCEL_2")]
+    [sg.Button('Home', key="B_QUERY_CANCEL_2")],
+    [sg.Text("", key='-queries_error_2-', visible=False)]
 ]
 
 layout_display_queries_3 = [
-    [sg.Text("Users who never posted poor review", key="-query7-", visible=True)],
+    [sg.Text("7. Users who never posted poor review", key="-query7-", visible=True)],
     [sg.Text("  ", key="-queries_result7-", visible=True)],
-    [sg.Text("Users who posted review but each of them is poor", key="-query8-", visible=True)],
+    [sg.Text("8. Users who posted review but each of them is poor", key="-query8-", visible=True)],
     [sg.Text("  ", key="-queries_result8-", visible=True)],
-    [sg.Text("Users who never get a Poor review ", key="-query9-", visible=True)],
+    [sg.Text("9. Users who never get a Poor review ", key="-query9-", visible=True)],
     [sg.Text("  ", key="-queries_result9-", visible=True)],
-    [sg.Text("User pairs who always give each other excellent review ", key="-query10-", visible=True)],
+    [sg.Text("10. User pairs who always give each other excellent review ", key="-query10-", visible=True)],
     [sg.Text("  ", key="-queries_result10-", visible=True)],
-    [sg.Button('Home', key="B_QUERY_CANCEL_3")]
+    [sg.Button('Home', key="B_QUERY_CANCEL_3")],
+    [sg.Text("", key='-queries_error_3-', visible=False)]
 ]
 
 layout_display_lists = [
