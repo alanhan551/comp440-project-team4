@@ -573,7 +573,23 @@ def display_queries_page_2():
     window['-susers_dropdown-'].update(values=result_for_user)
     
     # Query 6
-    cursor.execute("SELECT distinct user.username FROM user LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
+
+    query = '''SELECT u.username
+FROM user u
+LEFT JOIN item i ON i.insert_user = u.username
+LEFT JOIN (
+    SELECT insert_user, COUNT(*) AS excellent_count
+    FROM review
+    WHERE rating_review = 'excellent'
+    GROUP BY insert_user
+    HAVING COUNT(*) >= 3
+) r ON r.insert_user = u.username
+WHERE r.insert_user IS NULL OR r.excellent_count < 3
+GROUP BY u.username
+'''
+
+    # Execute the query
+    cursor.execute(query)
     result6 = cursor.fetchall()
     new_string6 = []
     for i in result6:
