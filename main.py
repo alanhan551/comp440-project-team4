@@ -345,7 +345,7 @@ def search_users(data):
         INNER JOIN item_category b ON a.id = b.item_id 
         INNER JOIN category c on b.category_id = c.id
         WHERE c.name = %s OR c.name = %s) AS full_item
-        GROUP BY insert_user HAVING COUNT(*) > 1""", (data['-input_category_1-'], data['-input_category_2-']))
+        GROUP BY insert_user, insert_date HAVING COUNT(*) > 1""", (data['-input_category_1-'], data['-input_category_2-']))
     result = cursor.fetchall()
     users = []
     for (insert_user,) in result:
@@ -535,7 +535,6 @@ def display_queries_page():
         table = []
         for row in result:
             table.append(row)
-        # table = tabulate(result_most_expensive_items, headers=["Category", "Item", "Price"])
         window['-most_expensive_items_table-'].update(values=table, visible=True)
 
         # User List for Query 3
@@ -629,9 +628,9 @@ def display_queries_page_3():
     query = '''SELECT username
     FROM user user_table
     WHERE NOT EXISTS(
-	SELECT insert_user
+	SELECT DISTINCT insert_user
     FROM item
-    WHERE id=(SELECT item_id FROM review WHERE rating_review='Poor')
+    WHERE id IN (SELECT item_id FROM review WHERE rating_review='Poor')
     AND insert_user=user_table.username
     )'''
     cursor.execute(query)
