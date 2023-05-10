@@ -113,8 +113,15 @@ DEFAULT_ROWS['review'] = (
     "       ('test1', 3, 'Excellent', 'Very nostalgic, loved to play it.'), "
     "       ('test1', 5, 'Poor', 'Not really into mystery novels.'), "
     "       ('test2', 1, 'Excellent', 'Great for music during exercise.'), "
-    "       ('test3', 4, 'Good', 'Suspenseful and catchy')"
+    "       ('test3', 4, 'Good', 'Suspenseful and catchy'), "
+    "       ('test2', 2, 'Excellent', 'Impressive features, highly recommended.'), "
+    "       ('test2', 3, 'Excellent', 'One of my all-time favorites.'), "
+    "       ('test3', 1, 'Excellent', 'Amazing quality and performance.'), "
+    "       ('test3', 5, 'Excellent', 'Engrossing storyline and characters.'), "
+    "       ('test4', 1, 'Excellent', 'The best purchase Ive made.'), "
+    "       ('test4', 2, 'Excellent', 'Outstanding product, worth every penny.')"
 )
+
 
 
 DEFAULT_ROWS['category'] = (
@@ -573,23 +580,7 @@ def display_queries_page_2():
     window['-susers_dropdown-'].update(values=result_for_user)
     
     # Query 6
-
-    query = '''SELECT u.username
-FROM user u
-LEFT JOIN item i ON i.insert_user = u.username
-LEFT JOIN (
-    SELECT insert_user, COUNT(*) AS excellent_count
-    FROM review
-    WHERE rating_review = 'excellent'
-    GROUP BY insert_user
-    HAVING COUNT(*) >= 3
-) r ON r.insert_user = u.username
-WHERE r.insert_user IS NULL OR r.excellent_count < 3
-GROUP BY u.username
-'''
-
-    # Execute the query
-    cursor.execute(query)
+    cursor.execute("SELECT username FROM user u WHERE NOT EXISTS (SELECT insert_user FROM item i LEFT JOIN (SELECT item_id FROM review GROUP BY item_id HAVING count(IF(rating_review='Excellent', 1, NULL)) >= 3) AS e ON i.id=e.item_id WHERE i.id=e.item_id AND i.insert_user=u.username)")
     result6 = cursor.fetchall()
     new_string6 = []
     for i in result6:
@@ -635,19 +626,14 @@ def display_queries_page_3():
     window['-queries_result8-'].update(new_string8, visible=True)
     
     # Query 9
-    query = '''SELECT DISTINCT u.username, u.firstName, u.lastName
-            FROM user u
-            INNER JOIN item i ON u.username = i.insert_user
-            LEFT JOIN (
-                SELECT item_id
-                FROM review
-                WHERE rating_review = 'Poor'
-            ) r ON i.id = r.item_id
-            WHERE r.item_id IS NULL
-            OR i.id NOT IN (
-                SELECT item_id
-                FROM review
-            )'''
+    query = '''SELECT username
+    FROM user user_table
+    WHERE NOT EXISTS(
+	SELECT insert_user
+    FROM item
+    WHERE id=(SELECT item_id FROM review WHERE rating_review='Poor')
+    AND insert_user=user_table.username
+    )'''
     cursor.execute(query)
     result9 = cursor.fetchall()
     new_string9 = []
@@ -658,25 +644,27 @@ def display_queries_page_3():
     window['-queries_result9-'].update(new_string9, visible=True)
     
     # Query 10
-    query = '''SELECT DISTINCT r1.insert_user as user_a, r2.insert_user as user_b
-                FROM review r1
-                JOIN review r2 ON r1.item_id = r2.item_id AND r1.insert_user <> r2.insert_user
-                WHERE r1.rating_review = 'excellent' AND r2.rating_review = 'excellent'
-                AND NOT EXISTS (
-                  SELECT *
-                  FROM review r3
-                  WHERE r3.item_id = r1.item_id
-                  AND ((r3.insert_user = r1.insert_user AND r3.rating_review != 'excellent')
-                       OR (r3.insert_user = r2.insert_user AND r3.rating_review != 'excellent'))
-                )'''
-                
+    query = '''
+        SELECT a.insert_user AS user_A, b.insert_user AS user_B
+        FROM item AS a
+        JOIN item AS b ON a.insert_user < b.insert_user
+        LEFT JOIN review AS ra ON a.id = ra.item_id AND ra.insert_user = b.insert_user AND ra.rating_review <> 'Excellent'
+        LEFT JOIN review AS rb ON b.id = rb.item_id AND rb.insert_user = a.insert_user AND rb.rating_review <> 'Excellent'
+        WHERE ra.item_id IS NULL AND rb.item_id IS NULL
+        GROUP BY user_A, user_B
+'''
+
     cursor.execute(query)
     result10 = cursor.fetchall()
     new_string10 = []
     for row in result10:
-        new_string10.append(row[0])
+        pair = (row[0], row[1])
+        if pair not in new_string10:
+            new_string10.append(pair)
     if len(new_string10) == 0:
         new_string10 = "No results found!"
+
+
     window['-queries_result10-'].update(new_string10, visible=True)
 
     window[f'-DISPLAY_QUERIES3-'].update(visible=True)
