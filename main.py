@@ -573,7 +573,7 @@ def display_queries_page_2():
     window['-susers_dropdown-'].update(values=result_for_user)
     
     # Query 6
-    cursor.execute("SELECT distinct user.username FROM user LEFT JOIN item ON item.insert_user = user.username LEFT JOIN review ON review.item_id = item.id GROUP BY user.username, item.id HAVING COUNT(CASE WHEN review.rating_review = 'Excellent' THEN 1 END) < 3 OR COUNT(review.rating_review) IS NULL")
+    cursor.execute("SELECT username FROM user u WHERE NOT EXISTS (SELECT insert_user FROM item i LEFT JOIN (SELECT item_id FROM review GROUP BY item_id HAVING count(IF(rating_review='Excellent', 1, NULL)) >= 3) AS e ON i.id=e.item_id WHERE i.id=e.item_id AND i.insert_user=u.username)")
     result6 = cursor.fetchall()
     new_string6 = []
     for i in result6:
@@ -619,19 +619,14 @@ def display_queries_page_3():
     window['-queries_result8-'].update(new_string8, visible=True)
     
     # Query 9
-    query = '''SELECT DISTINCT u.username, u.firstName, u.lastName
-            FROM user u
-            INNER JOIN item i ON u.username = i.insert_user
-            LEFT JOIN (
-                SELECT item_id
-                FROM review
-                WHERE rating_review = 'Poor'
-            ) r ON i.id = r.item_id
-            WHERE r.item_id IS NULL
-            OR i.id NOT IN (
-                SELECT item_id
-                FROM review
-            )'''
+    query = '''SELECT username
+    FROM user user_table
+    WHERE NOT EXISTS(
+	SELECT insert_user
+    FROM item
+    WHERE id=(SELECT item_id FROM review WHERE rating_review='Poor')
+    AND insert_user=user_table.username
+    )'''
     cursor.execute(query)
     result9 = cursor.fetchall()
     new_string9 = []
